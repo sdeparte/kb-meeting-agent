@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+from typing import Any, Literal
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ConfigError(Exception):
+    """Raised when the instance configuration cannot be loaded."""
+
+
+InterventionLevel = Literal["silent", "contradictions", "context"]
+
+_ENV_VAR = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
+
+
+def _substitute(value: Any) -> Any:
+    if isinstance(value, str):
+
+        def replace(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name not in os.environ:
+                raise ConfigError(f"environment variable {name} is not set")
+            return os.environ[name]
+
+        return _ENV_VAR.sub(replace, value)
+    if isinstance(value, dict):
+        return {key: _substitute(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_substitute(item) for item in value]
+    return value
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ModelRole(_Strict):
+    provider: Literal["anthropic", "openai-compatible", "fake"]
+    model: str
+    base_url: str | None = None
+    api_key: str | None = None
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+    refusal_fallback: bool = False
+
+
+class LLMConfig(_Strict):
+    fast: ModelRole
+    strong: ModelRole
+    embedding: ModelRole
+
+
+class KbConfig(_Strict):
+    repo: str
+    base_branch: str = "main"
+    token: str | None = None
+    clone_url: str | None = None
+
+
+class DefaultsConfig(_Strict):
+    intervention_level: InterventionLevel = "contradictions"
+    contradiction_min_confidence: float = Field(0.8, ge=0, le=1)
+    context_min_interval_minutes: float = 5
+    auto_leave_empty_minutes: float = 5
+    transcription_lag_alert_seconds: float = 30
+    transcript_retention_days: int = 30
+    stale_page_days: int = 60
+
+
+class AppConfig(_Strict):
+    agent_names: list[str] = Field(default_factory=lambda: ["agent"])
+    data_dir: Path = Path("~/.local/share/kb-meeting-agent")
+    llm: LLMConfig
+    knowledge_bases: dict[str, KbConfig]
+    defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
+
+
+def load_config(path: Path) -> AppConfig:
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    config = AppConfig.model_validate(_substitute(raw))
+    config.data_dir = config.data_dir.expanduser()
+    return config
