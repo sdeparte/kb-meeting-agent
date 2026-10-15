@@ -1,0 +1,44 @@
+[project]
+name = "kb-meeting-agent"
+version = "0.1.0"
+description = "An agent that listens to a voice meeting, checks what is said against a Git-hosted Markdown knowledge base, and opens pull requests for decisions and minutes."
+license = "Apache-2.0"
+readme = "README.md"
+authors = [
+    { name = "Sylvain DEPARTE", email = "sylvain.departe@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.14.0",
+    "httpx>=0.28.1",
+    "numpy>=2.5.4",
+    "openai>=3.31.0",
+    "pydantic>=2.14.1",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+kb-meeting-agent = "kb_meeting_agent.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.13,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # ruff format enforces length; long prompt and fixture strings stay readable
