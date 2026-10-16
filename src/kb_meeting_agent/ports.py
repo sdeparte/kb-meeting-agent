@@ -70,7 +70,8 @@ class Publisher(Protocol):
     ) -> str:
         """Replace the branch with one commit on the current base; return the new head.
 
-        Raises BranchChangedError when the branch head is not expected_head.
+        Leaves the branch alone when expected_head is already one commit on the current
+        base. Raises BranchChangedError when the branch head is not expected_head.
         """
         ...
 
