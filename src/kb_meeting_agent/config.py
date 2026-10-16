@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ConfigError(Exception):
@@ -52,6 +52,15 @@ class LLMConfig(_Strict):
     fast: ModelRole
     strong: ModelRole
     embedding: ModelRole
+
+    @model_validator(mode="after")
+    def _embedding_needs_an_embeddings_endpoint(self) -> LLMConfig:
+        if self.embedding.provider == "anthropic":
+            raise ValueError(
+                "llm.embedding cannot use the anthropic provider (Anthropic has no embeddings "
+                "endpoint); use an openai-compatible server"
+            )
+        return self
 
 
 class KbConfig(_Strict):
