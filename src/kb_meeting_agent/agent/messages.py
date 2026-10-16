@@ -14,6 +14,15 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "level_changed": "Intervention level: {level}.",
         "checks_paused": "Checks paused: the model is unavailable. Transcription continues.",
         "checks_resumed": "Checks resumed.",
+        "edit_title": "Edit the decision",
+        "edit_label": "Decision",
+        "decision_number_taken": (
+            "Decision {number:04d} is now used on the base branch: {url} needs a new number "
+            "before it can be merged."
+        ),
+        "decision_branch_changed": (
+            "{url} was changed by someone else during the meeting; the agent left it as is."
+        ),
         "model_rejected": "The model rejected the request ({error}). Check the model configuration.",
         "excerpt_unanchored": (
             "The decision could not be matched to an exact line; transcript around it:"
@@ -57,6 +66,16 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "Vérifications en pause : le modèle est indisponible. La transcription continue."
         ),
         "checks_resumed": "Vérifications reprises.",
+        "edit_title": "Modifier la décision",
+        "edit_label": "Décision",
+        "decision_number_taken": (
+            "Le numéro {number:04d} est désormais pris sur la branche de base : {url} doit être "
+            "renumérotée avant d'être mergée."
+        ),
+        "decision_branch_changed": (
+            "{url} a été modifiée par quelqu'un d'autre pendant la réunion ; l'agent n'y a pas "
+            "touché."
+        ),
         "model_rejected": "Le modèle a refusé la requête ({error}). Vérifier sa configuration.",
         "excerpt_unanchored": (
             "La décision n'a pas pu être rattachée à une ligne précise ; transcription autour :"
