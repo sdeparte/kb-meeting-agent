@@ -8,11 +8,14 @@ from kb_meeting_agent.ports import BranchChangedError, PrRef, PublishError
 class DryRunPublisher:
     """Writes what would be published under out_dir/<branch>/, plus a PR.md description."""
 
-    def __init__(self, out_dir: Path) -> None:
+    def __init__(self, out_dir: Path, local_urls: bool = True) -> None:
+        """local_urls=False labels PRs "dry run: <branch>" instead of a file:// URL, for
+        messages that participants see (local paths must not reach the meeting channel)."""
         self._out_dir = out_dir
+        self._local_urls = local_urls
         self._count = 0
 
-    async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef:
+    def _write(self, branch: str, files: dict[str, str]) -> Path:
         base = self._out_dir.resolve()
         root = (base / branch).resolve()
         targets = {(root / path).resolve(): content for path, content in files.items()}
@@ -20,13 +23,27 @@ class DryRunPublisher:
             raise PublishError(
                 f"refusing to write outside {base}: {branch}", public="unsafe file path"
             )
-        self._count += 1
         for target, content in targets.items():
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
         root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef:
+        root = self._write(branch, files)
+        self._count += 1
         (root / "PR.md").write_text(f"# {title}\n\n{body}", encoding="utf-8")
-        return PrRef(number=self._count, url=root.resolve().as_uri(), branch=branch)
+        url = root.as_uri() if self._local_urls else f"dry run: {branch}"
+        return PrRef(number=self._count, url=url, branch=branch)
+
+    async def is_open(self, pr: PrRef) -> bool:
+        return True
+
+    async def update_branch(
+        self, branch: str, files: dict[str, str], message: str, expected_head: str
+    ) -> str:
+        self._write(branch, files)
+        return expected_head
 
     async def open_pr_paths(self, prefix: str) -> list[str]:
         return []

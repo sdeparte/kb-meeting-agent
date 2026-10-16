@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from kb_meeting_agent.ports import PublishError
+from kb_meeting_agent.ports import BranchChangedError, PrRef, PublishError
 from kb_meeting_agent.publish.github import GitHubPublisher
 
 
@@ -43,6 +43,14 @@ def make(existing_branches=(), fail_pulls=False, refs_down=False):
                     {"filename": "other/0009-y.md", "status": "added"},
                 ],
             )
+        if request.method == "GET" and path == "/repos/o/r/pulls/7":
+            return httpx.Response(200, json={"number": 7, "state": "open"})
+        if request.method == "GET" and path == "/repos/o/r/pulls/8":
+            return httpx.Response(200, json={"number": 8, "state": "closed"})
+        if request.method == "GET" and path == "/repos/o/r/git/ref/heads/decision/x":
+            return httpx.Response(200, json={"object": {"sha": "agent-commit"}})
+        if request.method == "PATCH" and path == "/repos/o/r/git/refs/heads/decision/x":
+            return httpx.Response(200, json={})
         return httpx.Response(404)
 
     publisher = GitHubPublisher("o/r", "main", "token", transport=httpx.MockTransport(handler))
@@ -94,3 +102,34 @@ async def test_publish_error_public_summary_has_no_response_body():
         await publisher.open_pr("decision/x", {"a.md": "A"}, "T", "B")
     assert raised.value.public == "GitHub answered 403"
     assert "forbidden" in str(raised.value)
+
+
+async def test_is_open():
+    publisher, _ = make()
+    assert await publisher.is_open(PrRef(7, "u", "b"))
+    assert not await publisher.is_open(PrRef(8, "u", "b"))
+
+
+async def test_update_branch_force_moves_the_branch_to_a_commit_on_the_base():
+    publisher, calls = make()
+    head = await publisher.update_branch(
+        "decision/x", {"a.md": "A2"}, "Decision: x", "agent-commit"
+    )
+    assert head == "commit"
+    commit = next(body for method, path, body in calls if path.endswith("/git/commits"))
+    assert commit["parents"] == ["base"] and commit["message"] == "Decision: x"
+    patch = next(body for method, path, body in calls if method == "PATCH")
+    assert patch == {"sha": "commit", "force": True}
+
+
+async def test_open_pr_records_the_head_commit():
+    publisher, _ = make()
+    pr = await publisher.open_pr("decision/x", {"a.md": "A"}, "T", "B")
+    assert pr.head == "commit"
+
+
+async def test_update_branch_refuses_a_branch_changed_by_someone_else():
+    publisher, calls = make()
+    with pytest.raises(BranchChangedError):
+        await publisher.update_branch("decision/x", {"a.md": "A2"}, "T", "agent-old-commit")
+    assert not any(method == "PATCH" for method, _, _ in calls)
