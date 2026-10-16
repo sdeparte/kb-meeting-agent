@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from kb_meeting_agent.ports import PrRef, PublishError
+from kb_meeting_agent.ports import BranchChangedError, PrRef, PublishError
 
 MAX_BRANCH_ATTEMPTS = 9
 _NETWORK_ERROR = "network error while contacting GitHub"
@@ -47,7 +47,7 @@ class GitHubPublisher:
             )
         return response.json() if response.content else None
 
-    async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef:
+    async def _commit_on_base(self, files: dict[str, str], message: str) -> str:
         repo = f"/repos/{self._repo}"
         base = await self._request("GET", f"{repo}/git/ref/heads/{self._base}")
         base_sha = base["object"]["sha"]
@@ -65,15 +65,37 @@ class GitHubPublisher:
         commit = await self._request(
             "POST",
             f"{repo}/git/commits",
-            json={"message": title, "tree": tree["sha"], "parents": [base_sha]},
+            json={"message": message, "tree": tree["sha"], "parents": [base_sha]},
         )
-        head = await self._create_branch(branch, commit["sha"])
+        return commit["sha"]
+
+    async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef:
+        sha = await self._commit_on_base(files, title)
+        head = await self._create_branch(branch, sha)
         pull = await self._request(
             "POST",
-            f"{repo}/pulls",
+            f"/repos/{self._repo}/pulls",
             json={"title": title, "head": head, "base": self._base, "body": body},
         )
-        return PrRef(number=pull["number"], url=pull["html_url"], branch=head)
+        return PrRef(number=pull["number"], url=pull["html_url"], branch=head, head=sha)
+
+    async def is_open(self, pr: PrRef) -> bool:
+        pull = await self._request("GET", f"/repos/{self._repo}/pulls/{pr.number}")
+        return pull["state"] == "open"
+
+    async def update_branch(
+        self, branch: str, files: dict[str, str], message: str, expected_head: str
+    ) -> str:
+        ref = await self._request("GET", f"/repos/{self._repo}/git/ref/heads/{branch}")
+        if ref["object"]["sha"] != expected_head:
+            raise BranchChangedError(f"{branch} is at {ref['object']['sha']}, not {expected_head}")
+        sha = await self._commit_on_base(files, message)
+        await self._request(
+            "PATCH",
+            f"/repos/{self._repo}/git/refs/heads/{branch}",
+            json={"sha": sha, "force": True},
+        )
+        return sha
 
     async def _create_branch(self, branch: str, sha: str) -> str:
         for attempt in range(1, MAX_BRANCH_ATTEMPTS + 1):
