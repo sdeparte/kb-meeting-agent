@@ -69,3 +69,44 @@ def test_anthropic_embedding_is_rejected(tmp_path, monkeypatch):
     )
     with pytest.raises(ValidationError, match="embedding"):
         load_config(write(tmp_path, text))
+
+
+LIVE = """
+discord:
+  token: "${TEST_DISCORD_TOKEN}"
+  guild_id: "123456789012345678"
+transcription:
+  language: fr
+  live: {provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo}
+  final: {provider: faster-whisper, model: large-v3, device: cpu, beam_size: 5}
+  hallucination_phrases: ["Abonnez-vous"]
+"""
+
+
+def test_live_sections(tmp_path, monkeypatch):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    cfg = load_config(write(tmp_path, CONFIG.format(data_dir=tmp_path) + LIVE))
+    assert cfg.discord.guild_id == "123456789012345678"
+    assert cfg.discord.node == "node"
+    assert cfg.transcription.live.provider == "mlx-whisper"
+    assert cfg.transcription.final.beam_size == 5
+    assert cfg.transcription.workers == 2
+    assert cfg.transcription.hallucination_phrases == ["Abonnez-vous"]
+
+
+def test_live_sections_are_optional(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    cfg = load_config(write(tmp_path, CONFIG.format(data_dir=tmp_path)))
+    assert cfg.discord is None and cfg.transcription is None
+
+
+def test_unknown_transcriber_is_rejected(tmp_path, monkeypatch):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
+        "provider: mlx-whisper", "provider: vosk"
+    )
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, text))
