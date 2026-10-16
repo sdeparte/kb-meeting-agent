@@ -65,9 +65,50 @@ defaults:
 | `contradiction_min_confidence` | `0.8` | minimum model confidence (0 to 1) to post a contradiction |
 | `context_min_interval_minutes` | `5` | minimum delay between two "related page" messages |
 | `stale_page_days` | `60` | a contradiction quoting a page verified longer ago than this mentions the page's age |
-| `auto_leave_empty_minutes` | `5` | reserved for live meetings |
-| `transcription_lag_alert_seconds` | `30` | reserved for live meetings |
-| `transcript_retention_days` | `30` | reserved for live meetings |
+| `auto_leave_empty_minutes` | `5` | the agent leaves when no human has been in the voice channel for this long |
+| `transcription_lag_alert_seconds` | `30` | post a message when the transcription falls this far behind |
+| `transcript_retention_days` | `30` | meeting folders (audio, transcripts, state, kept files) are deleted once they have not been updated for this long, including meetings abandoned after a crash |
+
+## Discord and transcription
+
+Needed only by `kb-meeting-agent run`.
+
+### `discord`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `token` | (required) | bot token |
+| `guild_id` | (required) | server the agent serves; slash commands are registered there |
+| `node` | `node` | Node.js 22.12+ executable |
+| `connector_dir` | `connector-discord/` of this checkout | where the connector lives |
+
+The connector only receives the Discord token, the guild id and the local connection details, never model keys or the GitHub token.
+
+### `transcription`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `language` | auto-detected | language passed to Whisper (`fr`, `en`…) |
+| `workers` | `2` | utterances transcribed at the same time |
+| `live` | (required) | engine used during the meeting |
+| `final` | none | engine for the second pass at the end; the minutes are written from it |
+| `hallucination_phrases` | `[]` | phrases removed from transcriptions, on top of the built-in list ("Sous-titres réalisés par la communauté d'Amara.org", "Thanks for watching"…); an utterance that is only "Merci." or "Thank you." is also dropped |
+| `min_utterance_seconds` | `0.4` | shorter utterances are dropped |
+| `max_no_speech_prob` | `0.6` | utterances the engine marks as probably not speech are dropped (mlx-whisper always reports 0, so it never fires there) |
+| `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
+| `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
+| `vocabulary_max_chars` | `600` | length of the vocabulary hint built from the KB glossary |
+
+Engine keys (`live`, `final`):
+
+| Key | Meaning |
+|---|---|
+| `provider` | `mlx-whisper` (macOS, Apple GPU, `--extra mlx`), `faster-whisper` (CPU or CUDA, `--extra faster`), `openai-compatible` (`/v1/audio/transcriptions`) or `fake` |
+| `model` | model name or Hugging Face repository |
+| `base_url`, `api_key` | `openai-compatible` only |
+| `device`, `compute_type`, `beam_size` | `faster-whisper` only (`auto`, `int8`, `1`) |
+
+Without a GitHub `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
 
 ## KB conventions (`.meeting-agent.yml`)
 

@@ -1,0 +1,8 @@
+.git
+.venv
+**/node_modules
+**/__pycache__
+replay-out
+docs/specs
+docs/plans
+.superpowers

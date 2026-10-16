@@ -21,3 +21,13 @@ defaults:
   intervention_level: contradictions
   contradiction_min_confidence: 0.8
   stale_page_days: 60
+
+# For `kb-meeting-agent run` (Discord):
+# discord:
+#   token: "${DISCORD_TOKEN}"
+#   guild_id: "123456789012345678"
+#
+# transcription:
+#   language: fr
+#   live:  { provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo }
+#   final: { provider: mlx-whisper, model: mlx-community/whisper-large-v3-mlx }
