@@ -1,0 +1,23 @@
+# Copy to config.yml (git-ignored) and adjust. Secrets come from environment variables.
+agent_names: [scribe]
+data_dir: ~/.local/share/kb-meeting-agent
+
+llm:
+  # Everything local (Ollama on a Mac mini):
+  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b" }
+  embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
+  # Or Claude for the heavy steps:
+  strong:    { provider: anthropic, model: claude-opus-5-5, api_key: "${ANTHROPIC_API_KEY}", effort: high, refusal_fallback: true }
+  # A cheaper Claude model for the frequent detection steps:
+  # fast:    { provider: anthropic, model: claude-haiku-5-5, api_key: "${ANTHROPIC_API_KEY}" }
+
+knowledge_bases:
+  my-kb:
+    repo: owner/my-kb
+    base_branch: main
+    token: "${GITHUB_TOKEN}"   # needed to publish or to read a private KB; remove otherwise
+
+defaults:
+  intervention_level: contradictions
+  contradiction_min_confidence: 0.8
+  stale_page_days: 60

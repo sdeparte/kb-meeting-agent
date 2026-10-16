@@ -1,0 +1,151 @@
+# Configuration
+
+Two files configure the agent:
+
+- **`config.yml`**, on the machine that runs the agent: models, knowledge bases, secrets, default behaviour.
+- **`.meeting-agent.yml`**, at the root of each KB repository: that KB's conventions. It travels with the KB, so every instance that uses the KB writes in the same format.
+
+## Instance configuration (`config.yml`)
+
+Values written as `${VAR}` are replaced by the environment variable `VAR`; the agent refuses to start if it is not set. Unknown keys are rejected.
+
+```yaml
+agent_names: [scribe]
+data_dir: ~/.local/share/kb-meeting-agent
+
+llm:
+  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b" }
+  strong:    { provider: anthropic, model: claude-opus-5-5, api_key: "${ANTHROPIC_API_KEY}", effort: high }
+  embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
+
+knowledge_bases:
+  my-kb:
+    repo: owner/my-kb
+    base_branch: main
+    token: "${GITHUB_TOKEN}"
+
+defaults:
+  intervention_level: contradictions
+```
+
+### Top level
+
+| Key | Default | Meaning |
+|---|---|---|
+| `agent_names` | `[agent]` | words that make a segment a request to the agent (whole words, case-insensitive). Prefer a word nobody says by accident. |
+| `data_dir` | `~/.local/share/kb-meeting-agent` | where KB clones and search indexes are kept (`kb/<name>/repo`, `kb/<name>/index.sqlite`) |
+
+### `llm.fast`, `llm.strong`, `llm.embedding`
+
+| Key | Meaning |
+|---|---|
+| `provider` | `anthropic`, `openai-compatible`, or `fake` (canned answers, for tests and dry runs) |
+| `model` | model name as the provider knows it |
+| `base_url` | `openai-compatible` only: the server's `/v1` URL |
+| `api_key` | API key; optional for local servers |
+| `effort` | `anthropic` only: `low`, `medium`, `high`, `xhigh` or `max` |
+| `refusal_fallback` | `anthropic` only: when the model declines a request, let the API retry it on a fallback model (default `false`) |
+
+`embedding` must be `openai-compatible` (or `fake`): Anthropic has no embeddings endpoint, and the configuration is rejected otherwise. Changing the embedding model rebuilds the index on the next run.
+
+### `knowledge_bases.<name>`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `repo` | (required) | GitHub repository, `owner/name` |
+| `base_branch` | `main` | branch the agent reads and opens pull requests against |
+| `token` | none | GitHub token; required for `--publish` and for a private KB. Permissions: Contents and Pull requests, read and write. |
+| `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to `https://github.com/` URLs. |
+
+### `defaults`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `intervention_level` | `contradictions` | `silent`: speaks only when addressed. `contradictions`: also flags statements that contradict the KB. `context`: also links related KB pages. |
+| `contradiction_min_confidence` | `0.8` | minimum model confidence (0 to 1) to post a contradiction |
+| `context_min_interval_minutes` | `5` | minimum delay between two "related page" messages |
+| `stale_page_days` | `60` | a contradiction quoting a page verified longer ago than this mentions the page's age |
+| `auto_leave_empty_minutes` | `5` | reserved for live meetings |
+| `transcription_lag_alert_seconds` | `30` | reserved for live meetings |
+| `transcript_retention_days` | `30` | reserved for live meetings |
+
+## KB conventions (`.meeting-agent.yml`)
+
+Every key is optional. Example for a French KB with numbered decision records and an index table:
+
+```yaml
+language: fr
+instructions: [CONTRIBUTING.md]
+exclude: [mockups/**, minutes/**]
+authoritative: [reference/configuration.md]
+glossary: reference/glossary.md
+
+page_header:
+  verified_date: '^> \*\*Vérifié le\*\* (\d{4}-\d{2}-\d{2})'
+
+statuses:
+  - {pattern: '[PROD]', meaning: in_production}
+  - {pattern: '[EN COURS]', meaning: in_progress}
+  - {pattern: '[PRÉVU]', meaning: planned}
+  - {pattern: '[ÉCARTÉ]', meaning: rejected}
+
+decisions:
+  dir: decisions
+  filename: '{number:04d}-{slug}.md'
+  template: .meeting-agent/decision.md
+  default_status: acceptée
+  index:
+    file: decisions/README.md
+    row: '| [{number:04d}]({filename}) | {title} | {status} |'
+  branch: 'decision/{date}-{slug}'
+
+minutes:
+  dir: minutes
+  filename: '{date}-{slug}.md'
+  template: .meeting-agent/minutes.md
+  branch: 'minutes/{date}-{slug}'
+```
+
+### General
+
+| Key | Default | Meaning |
+|---|---|---|
+| `language` | `en` | language of the agent's messages, pull requests and generated documents (`en` and `fr` messages are built in; other languages fall back to English messages, but generated documents follow `language`) |
+| `instructions` | `[]` | files given to the model when it writes decision records and minutes, for example a contribution guide. Truncated to 12,000 characters in total. |
+| `exclude` | `[]` | glob patterns of Markdown files not to index (`*` also matches `/`) |
+| `authoritative` | `[]` | files ranked higher in search, for example the page that holds reference values |
+| `glossary` | none | given to the model when it rewrites a question into search queries, to map names to identifiers (first 4,000 characters) |
+| `page_header.verified_date` | none | regular expression with one capture group matching a page's last verification date (`YYYY-MM-DD`). The matching line is not indexed. |
+| `statuses` | `[]` | status tags used in pages. `meaning` is one of `in_production`, `in_progress`, `planned`, `rejected`: a value under a planned item is not treated as the production value, and restating a rejected idea is flagged as already rejected. |
+
+### `decisions`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `dir` | `decisions` | folder of decision records |
+| `filename` | `{number:04d}-{slug}.md` | file name. With `{number}`, the agent takes the next free number, counting the KB as synced at the start of the meeting, files added by open pull requests and numbers already used in the meeting. A record merged during the meeting is not counted. |
+| `template` | built-in English template | file in the KB used as the record template |
+| `default_status` | `accepted` | value of `{status}` |
+| `index.file`, `index.row` | none | file the agent adds a row to, after the last table row of the file (code blocks ignored): keep the index as the file's last table |
+| `branch` | `decision/{date}-{slug}` | branch name; on GitHub, `-2` to `-9` is appended if it already exists. Dry runs and `unpublished/` reuse the name. |
+
+### `minutes`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `dir` | `meetings` | folder of minutes |
+| `filename` | `{date}-{slug}.md` | file name |
+| `template` | built-in English template | file in the KB used as the minutes template |
+| `branch` | `meetings/{date}-{slug}` | branch name |
+
+### Template placeholders
+
+Templates are Markdown files. `{key}` and `{key:format}` (Python format, for example `{number:04d}`) are replaced for the keys below; any other brace is left as is.
+
+| Template | Keys |
+|---|---|
+| decision record, decision `filename` and `branch` | `number` (numbered KBs only), `title`, `slug`, `status`, `date`, `scope`, `context`, `decision`, `consequences`, `sources` |
+| `index.row` | the same, plus `filename` and `path` |
+| minutes, minutes `filename` and `branch` | `title`, `slug`, `date`, `participants`, `body` |
+
+`date` is the meeting date (`YYYY-MM-DD`); `slug` is ASCII kebab-case. Keep model-written fields such as `title` out of `filename` and `branch`: use `slug`.

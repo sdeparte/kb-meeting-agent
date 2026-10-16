@@ -1,0 +1,5 @@
+{"speaker_id": "1", "speaker_name": "Alice", "start": 0, "end": 6, "text": "Let's talk about the neutralization cooldown."}
+{"speaker_id": "2", "speaker_name": "Bob", "start": 7, "end": 14, "text": "Right now the cooldown is 30 seconds, isn't it?"}
+{"speaker_id": "1", "speaker_name": "Alice", "start": 15, "end": 24, "text": "Scribe, what does the KB say about the cooldown?"}
+{"speaker_id": "2", "speaker_name": "Bob", "start": 25, "end": 36, "text": "OK, we agree: we lower the cooldown to 30 seconds."}
+{"speaker_id": "1", "speaker_name": "Alice", "start": 37, "end": 45, "text": "Agreed, cooldown at 30 seconds."}
