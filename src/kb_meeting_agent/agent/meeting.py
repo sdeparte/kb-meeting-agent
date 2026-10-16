@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Awaitable
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Sequence
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from kb_meeting_agent.agent.answering import answer_question
 from kb_meeting_agent.agent.decisions import (
     Change,
+    DecisionDraft,
     build_decision_change,
     draft_decision,
+    existing_numbers,
     next_number,
 )
 from kb_meeting_agent.agent.detection import (
@@ -33,8 +35,10 @@ from kb_meeting_agent.kb.quote import quote_exists
 from kb_meeting_agent.llm.base import LLMConfigError, LLMError, LLMProvider, LLMUnavailable
 from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import (
+    BranchChangedError,
     Button,
     KnowledgeBase,
+    Modal,
     OutMessage,
     OutputSink,
     PrRef,
@@ -69,6 +73,7 @@ class PendingDecision:
     anchored: bool
     state: Literal["pending", "validated", "ignored", "kept"] = "pending"
     pr: PrRef | None = None
+    publication: dict[str, Any] | None = None
 
 
 class MeetingAgent:
@@ -98,6 +103,8 @@ class MeetingAgent:
         self._reserved_numbers: set[int] = set()
         self._summary = ""
         self._last_extraction_end = 0.0
+        self._latest_end = 0.0
+        self._extracted = 0  # transcript segments already given to the extraction
         self._last_summary_end = 0.0
         self._last_context_at: float | None = None
         self._paused = False
@@ -135,19 +142,23 @@ class MeetingAgent:
 
     async def on_segment(self, segment: Segment) -> None:
         self.transcript.append(segment)
+        self._latest_end = max(self._latest_end, segment.end)
         if is_addressed(segment.text, self.settings.agent_names):
             await self._guard(self._handle_addressed(segment))
-        if segment.end - self._last_extraction_end >= self.settings.extraction_interval_s:
-            await self._extract(until=segment.end)
+        if self._latest_end - self._last_extraction_end >= self.settings.extraction_interval_s:
+            await self._extract()
 
     async def flush(self) -> None:
-        segments = self.transcript.all()
-        if segments and segments[-1].end > self._last_extraction_end:
-            await self._extract(until=segments[-1].end)
+        if self._extracted < len(self.transcript.all()):
+            await self._extract()
 
-    async def _extract(self, until: float) -> None:
-        new = [s for s in self.transcript.all() if self._last_extraction_end < s.end <= until]
-        self._last_extraction_end = until
+    async def _extract(self) -> None:
+        # Live transcription finishes out of order across speakers: extract every segment
+        # not seen yet, whatever its time, rather than a time range.
+        segments = self.transcript.all()
+        new = segments[self._extracted :]
+        self._extracted = len(segments)
+        self._last_extraction_end = self._latest_end
         if new:
             await self._guard(self._process(new))
 
@@ -197,9 +208,15 @@ class MeetingAgent:
         self.decisions[decision_id] = PendingDecision(
             decision_id, candidate.statement, matched or tuple(new), anchored=bool(matched)
         )
-        buttons = tuple(
-            Button(f"decision:{decision_id}:{action}", t(self._lang, f"button_{action}"))
-            for action in ("validate", "edit", "ignore")
+        edit = Modal(
+            title=t(self._lang, "edit_title"),
+            label=t(self._lang, "edit_label"),
+            value=candidate.statement,
+        )
+        buttons = (
+            Button(f"decision:{decision_id}:validate", t(self._lang, "button_validate")),
+            Button(f"decision:{decision_id}:edit", t(self._lang, "button_edit"), modal=edit),
+            Button(f"decision:{decision_id}:ignore", t(self._lang, "button_ignore")),
         )
         await self._say(t(self._lang, "decision_detected", statement=candidate.statement), buttons)
 
@@ -254,8 +271,7 @@ class MeetingAgent:
             )
             await self._say(text)
         elif intent.kind == "set_level" and intent.level in LEVELS:
-            self.level = intent.level
-            await self._say(t(self._lang, "level_changed", level=intent.level))
+            await self.set_level(intent.level)
         elif intent.kind in ("validate", "ignore"):
             pending = [d for d in self.decisions.values() if d.state == "pending"]
             if pending and intent.kind == "validate":
@@ -271,6 +287,33 @@ class MeetingAgent:
             await self.validate_decision(decision_id, user)
         elif action == "ignore":
             await self.ignore_decision(decision_id, user)
+
+    async def on_modal(self, custom_id: str, value: str, user: str) -> None:
+        parts = custom_id.split(":")
+        if len(parts) == 3 and parts[0] == "decision" and parts[2] == "edit" and value.strip():
+            await self.edit_decision(parts[1], value.strip(), user)
+
+    async def set_level(self, level: InterventionLevel, announce: bool = True) -> None:
+        if level not in LEVELS:
+            return
+        self.level = level
+        if announce:
+            await self._say(t(self._lang, "level_changed", level=level))
+
+    async def ask(self, question: str) -> str:
+        context = format_segments(self.transcript.window(self.settings.window_s))
+        try:
+            return await answer_question(
+                self.fast,
+                self.strong,
+                self.kb,
+                question=question,
+                context=context,
+                language=self._lang,
+            )
+        except LLMError as exc:
+            log.warning("answering failed: %s", exc)
+            return t(self._lang, "checks_paused")
 
     async def edit_decision(self, decision_id: str, statement: str, user: str) -> None:
         decision = self.decisions.get(decision_id)
@@ -315,21 +358,8 @@ class MeetingAgent:
             number = next_number(
                 self.kb.list_files(conventions.dir) + open_paths, self._reserved_numbers
             )
-        index_file = conventions.index.file if conventions.index else None
-        change = build_decision_change(
-            conventions=conventions,
-            template=self.kb.template("decision"),
-            draft=draft,
-            number=number,
-            meeting_date=self.settings.meeting_date,
-            quote=excerpt,
-            validated_by=user,
-            index_content=self.kb.read(index_file)
-            if index_file and self.kb.exists(index_file)
-            else None,
-            language=self._lang,
-            excerpt_note="" if decision.anchored else t(self._lang, "excerpt_unanchored"),
-        )
+        note = "" if decision.anchored else t(self._lang, "excerpt_unanchored")
+        change = self._decision_change(draft, number, excerpt, user, note)
         pr = await self._open_pr(change)
         if isinstance(pr, Path):
             decision.state = "kept"
@@ -339,7 +369,76 @@ class MeetingAgent:
         if number is not None:
             self._reserved_numbers.add(number)
         decision.state, decision.pr = "validated", pr
+        decision.publication = {
+            "draft": draft.model_dump(),
+            "number": number,
+            "quote": excerpt,
+            "validated_by": user,
+            "excerpt_note": note,
+        }
         await self._say(t(self._lang, "decision_published", user=user, url=pr.url))
+
+    def _decision_change(
+        self, draft: DecisionDraft, number: int | None, quote: str, user: str, note: str
+    ) -> Change:
+        conventions = self.kb.conventions.decisions
+        index_file = conventions.index.file if conventions.index else None
+        index_content = (
+            self.kb.read(index_file) if index_file and self.kb.exists(index_file) else None
+        )
+        return build_decision_change(
+            conventions=conventions,
+            template=self.kb.template("decision"),
+            draft=draft,
+            number=number,
+            meeting_date=self.settings.meeting_date,
+            quote=quote,
+            validated_by=user,
+            index_content=index_content,
+            language=self._lang,
+            excerpt_note=note,
+        )
+
+    async def refresh_decision_prs(self) -> None:
+        """Rebuild each open decision PR on the current base (call after syncing the KB).
+
+        Equivalent to a rebase without merge commits: the agent's branch is replaced by a
+        single commit on the new base. A number taken on the base meanwhile is reported.
+        """
+        taken = existing_numbers(self.kb.list_files(self.kb.conventions.decisions.dir))
+        for decision in self.decisions.values():
+            pub = decision.publication
+            if decision.state != "validated" or decision.pr is None or pub is None:
+                continue
+            try:
+                if not await self.publisher.is_open(decision.pr):
+                    continue
+                if pub["number"] is not None and pub["number"] in taken:
+                    await self._say(
+                        t(
+                            self._lang,
+                            "decision_number_taken",
+                            number=pub["number"],
+                            url=decision.pr.url,
+                        )
+                    )
+                    continue
+                change = self._decision_change(
+                    DecisionDraft.model_validate(pub["draft"]),
+                    pub["number"],
+                    pub["quote"],
+                    pub["validated_by"],
+                    pub["excerpt_note"],
+                )
+                head = await self.publisher.update_branch(
+                    decision.pr.branch, change.files, change.title, decision.pr.head
+                )
+                decision.pr = replace(decision.pr, head=head)
+            except BranchChangedError:
+                await self._say(t(self._lang, "decision_branch_changed", url=decision.pr.url))
+            except PublishError as exc:
+                log.error("refreshing %s failed: %s", decision.pr.url, exc)
+                await self._say(t(self._lang, "publish_failed", error=exc.public))
 
     async def _open_pr(self, change: Change) -> PrRef | Path | None:
         """Open the PR; on any failure keep the files locally so the work is not lost.
@@ -368,9 +467,15 @@ class MeetingAgent:
             await self._say(t(self._lang, "kept_locally", error=shown))
             return kept
 
-    async def end(self) -> PrRef | None:
+    async def end(
+        self,
+        segments: list[Segment] | None = None,
+        gaps: Sequence[tuple[float, float]] = (),
+    ) -> PrRef | None:
         await self.flush()
-        segments = self.transcript.all()
+        segments = sorted(
+            segments if segments is not None else self.transcript.all(), key=lambda s: s.start
+        )
         if not segments:
             return None
         try:
@@ -384,6 +489,7 @@ class MeetingAgent:
                 flags=self.flags,
                 instructions=self.kb.instructions(),
                 language=self._lang,
+                gaps=list(gaps),
             )
         except LLMError as exc:
             log.exception("writing the minutes failed; transcript at %s", self.transcript.path)
@@ -403,6 +509,58 @@ class MeetingAgent:
             return None
         await self._say(t(self._lang, "minutes_published", url=pr.url))
         return pr
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "level": self.level,
+            "summary": self._summary,
+            "extracted": self._extracted,
+            "latest_end": self._latest_end,
+            "last_extraction_end": self._last_extraction_end,
+            "last_summary_end": self._last_summary_end,
+            "last_context_at": self._last_context_at,
+            "reserved_numbers": sorted(self._reserved_numbers),
+            "flagged_subjects": sorted(self._flagged_subjects),
+            "flagged_lines": [list(line) for line in sorted(self._flagged_lines)],
+            "flags": [asdict(flag) for flag in self.flags],
+            "decisions": [
+                {
+                    "id": d.id,
+                    "statement": d.statement,
+                    "excerpt": [asdict(s) for s in d.excerpt],
+                    "anchored": d.anchored,
+                    "state": d.state,
+                    "pr": asdict(d.pr) if d.pr else None,
+                    "publication": d.publication,
+                }
+                for d in self.decisions.values()
+            ],
+        }
+
+    def restore(self, state: dict[str, Any]) -> None:
+        self.level = state["level"]
+        self._summary = state["summary"]
+        self._extracted = state["extracted"]
+        self._latest_end = state["latest_end"]
+        self._last_extraction_end = state["last_extraction_end"]
+        self._last_summary_end = state["last_summary_end"]
+        self._last_context_at = state["last_context_at"]
+        self._reserved_numbers = set(state["reserved_numbers"])
+        self._flagged_subjects = set(state["flagged_subjects"])
+        self._flagged_lines = {tuple(line) for line in state["flagged_lines"]}
+        self.flags = [Flag(**flag) for flag in state["flags"]]
+        self.decisions = {
+            d["id"]: PendingDecision(
+                id=d["id"],
+                statement=d["statement"],
+                excerpt=tuple(Segment(**s) for s in d["excerpt"]),
+                anchored=d["anchored"],
+                state=d["state"],
+                pr=PrRef(**d["pr"]) if d["pr"] else None,
+                publication=d["publication"],
+            )
+            for d in state["decisions"]
+        }
 
 
 _STOPWORDS = frozenset(

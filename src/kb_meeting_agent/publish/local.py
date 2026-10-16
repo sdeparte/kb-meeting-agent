@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kb_meeting_agent.ports import PrRef, PublishError
+from kb_meeting_agent.ports import BranchChangedError, PrRef, PublishError
 
 
 class DryRunPublisher:
@@ -33,14 +33,35 @@ class DryRunPublisher:
 
 
 class FakePublisher:
-    def __init__(self, open_paths: list[str] | None = None) -> None:
+    def __init__(self, open_paths: list[str] | None = None, closed: set[int] | None = None) -> None:
         self.prs: list[tuple[str, dict[str, str], str, str]] = []
+        self.updates: list[tuple[str, dict[str, str], str]] = []
+        self.update_heads: list[str] = []
+        self.moved: set[str] = set()  # branches someone else pushed to
         self._open_paths = list(open_paths or [])
+        self._closed = set(closed or ())
 
     async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef:
         self.prs.append((branch, files, title, body))
         number = len(self.prs)
-        return PrRef(number=number, url=f"https://example.test/pull/{number}", branch=branch)
+        return PrRef(
+            number=number,
+            url=f"https://example.test/pull/{number}",
+            branch=branch,
+            head=f"sha{number}",
+        )
 
     async def open_pr_paths(self, prefix: str) -> list[str]:
         return [path for path in self._open_paths if path.startswith(prefix)]
+
+    async def is_open(self, pr: PrRef) -> bool:
+        return pr.number not in self._closed
+
+    async def update_branch(
+        self, branch: str, files: dict[str, str], message: str, expected_head: str
+    ) -> str:
+        if branch in self.moved:
+            raise BranchChangedError(f"{branch} moved")
+        self.updates.append((branch, files, message))
+        self.update_heads.append(expected_head)
+        return f"{expected_head}+"
