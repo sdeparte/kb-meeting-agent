@@ -69,3 +69,23 @@ def test_build_minutes_change():
         "reunions/2026-10-15-weekly-sync.md": "# Weekly sync\n\nAlice, Bob\n\n## Points\n\nText\n"
     }
     assert change.title == "Compte rendu : Weekly sync"
+
+
+async def test_write_minutes_mentions_gaps():
+    strong = FakeProvider(
+        {
+            "SliceSummary": [{"summary": "s"}],
+            "MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}],
+        }
+    )
+    await write_minutes(
+        strong,
+        segments=[seg(0, "Alice", "hello")],
+        decisions=[],
+        flags=[],
+        instructions="",
+        language="en",
+        gaps=[(300.0, 370.0)],
+    )
+    user = strong.calls_for("MinutesDraft")[0][2]
+    assert "TRANSCRIPTION GAPS:\n- 00:05:00 to 00:06:10" in user
