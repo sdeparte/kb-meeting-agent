@@ -58,3 +58,14 @@ def test_data_dir_is_expanded(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
     cfg = load_config(write(tmp_path, CONFIG.format(data_dir="~/kbma")))
     assert not str(cfg.data_dir).startswith("~")
+
+
+def test_anthropic_embedding_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    text = CONFIG.format(data_dir=tmp_path).replace(
+        '{provider: openai-compatible, base_url: "http://localhost:11434/v1", model: bge-m3}',
+        "{provider: anthropic, model: claude-opus-5-5}",
+    )
+    with pytest.raises(ValidationError, match="embedding"):
+        load_config(write(tmp_path, text))
