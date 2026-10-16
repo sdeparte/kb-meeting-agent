@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from itertools import groupby
@@ -34,7 +35,7 @@ SLICE_SYSTEM = """Summarize this part of a meeting transcript in language "{lang
 Factual, no invention, at most 250 words."""
 
 MINUTES_SYSTEM = """You write the detailed minutes of a meeting for a knowledge base, following the KB's conventions below.
-Use only the material provided. `body` is Markdown with level-2 headings for: participants, agenda (inferred), discussion (one sub-section per topic), decisions (link each validated decision to its pull request URL), decisions proposed but not retained, contradictions with the KB that were raised, action items (with owner when stated), open questions. Omit a section only when it has no content.
+Use only the material provided. `body` is Markdown with level-2 headings for: participants, agenda (inferred), discussion (one sub-section per topic), decisions (link each validated decision to its pull request URL), decisions proposed but not retained, contradictions with the KB that were raised, action items (with owner when stated), open questions, transcription gaps. Omit a section only when it has no content.
 `title` is short; `slug` is kebab-case ASCII. Write in language "{language}".
 
 KB CONVENTIONS:
@@ -50,6 +51,7 @@ async def write_minutes(
     instructions: str,
     language: str,
     slice_seconds: float = 600,
+    gaps: Sequence[tuple[float, float]] = (),
 ) -> MinutesDraft:
     summaries: list[str] = []
     for slice_index, part in groupby(segments, key=lambda s: int(s.start // slice_seconds)):
@@ -71,11 +73,13 @@ async def write_minutes(
         f"- {flag.statement} → {flag.verdict}: “{flag.quote}” ({flag.anchor}). {flag.reason}"
         for flag in flags
     ]
+    gap_lines = [f"- {format_timestamp(start)} to {format_timestamp(end)}" for start, end in gaps]
     user = (
         f"PARTICIPANTS: {', '.join(participants)}\n\n"
         f"PART SUMMARIES:\n" + "\n\n".join(summaries) + "\n\n"
         "DECISIONS:\n" + ("\n".join(decision_lines) or "(none)") + "\n\n"
-        "KB CONTRADICTIONS RAISED:\n" + ("\n".join(flag_lines) or "(none)")
+        "KB CONTRADICTIONS RAISED:\n" + ("\n".join(flag_lines) or "(none)") + "\n\n"
+        "TRANSCRIPTION GAPS:\n" + ("\n".join(gap_lines) or "(none)")
     )
     system = MINUTES_SYSTEM.format(language=language, instructions=instructions or "(none)")
     return await complete(strong, system, user, MinutesDraft)

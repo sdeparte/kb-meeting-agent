@@ -23,13 +23,16 @@ def slugify(text: str, max_len: int = 60) -> str:
 _LEADING_NUMBER = re.compile(r"^(\d+)")
 
 
-def next_number(paths: Iterable[str], reserved: Iterable[int] = ()) -> int:
-    numbers = {
+def existing_numbers(paths: Iterable[str]) -> set[int]:
+    return {
         int(match.group(1))
         for path in paths
         if (match := _LEADING_NUMBER.match(PurePosixPath(path).name))
     }
-    return max(numbers | set(reserved), default=0) + 1
+
+
+def next_number(paths: Iterable[str], reserved: Iterable[int] = ()) -> int:
+    return max(existing_numbers(paths) | set(reserved), default=0) + 1
 
 
 _FENCE = re.compile(r"^\s*(```|~~~)")
