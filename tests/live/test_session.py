@@ -216,3 +216,21 @@ async def test_a_failed_question_is_answered(make_session):
     reply = next(r for r in link.of("reply") if r["interaction_id"] == "i2")
     assert reply["text"] == "The command failed; details are in the agent's log."
 
+
+async def test_a_restarted_connector_gets_the_edit_modals_back(make_session):
+    decision = {"statement": "Cooldown is 30 seconds", "quote": "bonjour à tous"}
+    fast = FakeProvider({"Extraction": [{"claims": [], "decisions": [decision], "topics": []}]})
+    session, link, *_ = make_session(fast=fast)
+    await start(session)
+    await speak(session, start=0, ms=31_000)
+    await session.settle()
+    await session.on_event("connected", {"type": "hello"})
+    [resent] = link.of("modals")
+    assert resent["modals"][0]["id"] == "decision:d1:edit"
+    assert resent["modals"][0]["modal"]["value"] == "Cooldown is 30 seconds"
+    await session.on_event(
+        "message",
+        {"type": "button", "custom_id": "decision:d1:ignore", "user": {"id": "u1", "name": "A"}},
+    )
+    await session.on_event("connected", {"type": "hello"})
+    assert len(link.of("modals")) == 1  # nothing left to give back

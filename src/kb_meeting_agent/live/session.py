@@ -48,6 +48,9 @@ class ConnectorSink:
         self._link = link
         self._channel_id = channel_id
         self._count = 0
+        # The connector opens a button's modal itself, from memory: kept here too, so a
+        # restarted connector can be given them again (see resend_modals).
+        self._modals: dict[str, dict[str, Any]] = {}
 
     async def send(self, message: OutMessage) -> str:
         self._count += 1
@@ -56,6 +59,7 @@ class ConnectorSink:
             {"id": b.id, "label": b.label, **({"modal": asdict(b.modal)} if b.modal else {})}
             for b in message.buttons
         ]
+        self._modals |= {b["id"]: b["modal"] for b in buttons if "modal" in b}
         await self._link.send(
             "send",
             request_id=request_id,
@@ -64,6 +68,16 @@ class ConnectorSink:
             buttons=buttons,
         )
         return request_id
+
+    def forget_modals(self, custom_id: str) -> None:
+        """As the connector does: once one of a message's buttons is used, its modals go."""
+        prefix = custom_id[: custom_id.rfind(":") + 1]
+        self._modals = {id_: m for id_, m in self._modals.items() if not id_.startswith(prefix)}
+
+    async def resend_modals(self) -> None:
+        if self._modals:
+            modals = [{"id": id_, "modal": modal} for id_, modal in self._modals.items()]
+            await self._link.send("modals", modals=modals)
 
 
 @dataclass
@@ -183,8 +197,10 @@ class MeetingSession:
         if kind == "command":
             await self._on_command(msg)
         elif kind == "button" and m:
+            m.sink.forget_modals(msg["custom_id"])
             await m.queue.put(("button", msg["custom_id"], msg["user"]["name"]))
         elif kind == "modal_submit" and m:
+            m.sink.forget_modals(msg["custom_id"])
             await m.queue.put(("modal", msg["custom_id"], msg["value"], msg["user"]["name"]))
         elif kind == "members" and m:
             self._on_members(msg["members"])
@@ -208,6 +224,7 @@ class MeetingSession:
             self._gap_start()
             await self._join(m)
             await self._send_optouts(m)  # a restarted connector has forgotten them
+            await m.sink.resend_modals()  # and the Edit modals of messages already posted
 
     async def _join(self, m: ActiveMeeting) -> None:
         m.voice_ready.clear()
