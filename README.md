@@ -9,11 +9,12 @@ An agent that joins a voice meeting, listens, and works with a knowledge base (K
 
 Models are pluggable: Claude through the Anthropic API, or any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, mlx-lm) for a fully local setup.
 
-> **Status.** The core runs in **replay** mode: it reads a recorded transcript instead of a live meeting. The Discord connector and live transcription are not implemented yet; this README will explain how to add the agent to a Discord channel once they are.
+> **Status.** The agent joins Discord voice channels (`kb-meeting-agent run`) and can replay a recorded transcript (`kb-meeting-agent replay`). Other meeting platforms are not supported yet.
 
 ## Requirements
 
 - Python 3.12 and [uv](https://docs.astral.sh/uv/)
+- Node.js 22.12 or later, for the Discord connector
 - Git
 - A KB: a Git repository of Markdown files, hosted on GitHub to publish pull requests
 - One of:
@@ -137,6 +138,74 @@ One JSON object per line, times in seconds from the start of the meeting:
 
 The agent answers when one of `agent_names` appears in a segment (`scribe` in the example configuration).
 
+## Add the agent to a Discord server
+
+### 1. Create the bot
+
+1. At <https://discord.com/developers/applications>, create an application.
+2. **Bot** tab: **Reset Token** and keep the token; turn **Public Bot** off.
+3. **OAuth2 → URL Generator**: scopes `bot` and `applications.commands`; permissions *View Channels*, *Send Messages*, *Connect*, *Use Application Commands*. Open the URL and add the bot to your server.
+4. Check the voice channels you will use: a channel or category override that denies **Connect** to the bot's role blocks the voice connection without a clear error.
+5. In Discord, enable developer mode (Settings → Advanced), right-click the server → **Copy Server ID**.
+
+### 2. Configure
+
+```yaml
+discord:
+  token: "${DISCORD_TOKEN}"
+  guild_id: "123456789012345678"
+
+transcription:
+  language: fr
+  live:  { provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo }   # Mac
+  final: { provider: mlx-whisper, model: mlx-community/whisper-large-v3 }         # optional second pass
+```
+
+On Linux or WSL, use `provider: faster-whisper` (`model: small` on CPU, `large-v3` on a CUDA GPU). Every option is in [docs/configuration.md](docs/configuration.md#discord-and-transcription).
+
+### 3. Install and run
+
+```bash
+uv sync --extra mlx          # macOS on Apple Silicon; use --extra faster elsewhere
+(cd connector-discord && npm ci)
+export DISCORD_TOKEN=... GITHUB_TOKEN=... ANTHROPIC_API_KEY=...
+uv run kb-meeting-agent run
+```
+
+The agent registers its slash commands on the server, starts the connector and restarts it if it stops. Stop it with Ctrl+C: a running meeting is closed first.
+
+### 4. Hold a meeting
+
+| Command | Effect |
+|---|---|
+| `/meeting start kb:<name> [level]` | joins your voice channel and posts the recording notice |
+| `/ask <question>` | answers from the KB |
+| `/meeting level <level>` | `silent`, `contradictions` or `context` |
+| `/meeting optout` | stops transcribing your voice |
+| `/meeting end` | writes the minutes and opens the pull requests |
+| `/meeting resume` | resumes a meeting interrupted by a crash |
+| `/meeting retry-publish` | publishes pull requests kept after a failed publication |
+
+Participants can also address the agent by voice ("scribe, …"). The agent leaves when nobody is left in the channel for `auto_leave_empty_minutes`.
+
+**Audio and privacy.** Audio is kept on the agent's machine until the minutes are published (for the second transcription pass), then deleted. `/meeting optout` deletes your recorded audio at once; what you said before stays in the transcript. Meeting folders are deleted after `transcript_retention_days`. The full transcript is never published. Everyone in the channel sees the recording notice when the meeting starts.
+
+**Headsets.** Without one, a participant's microphone picks up the people around them, and their words end up in that participant's transcript.
+
+**Docker (Linux, WSL).** `docker build -t kb-meeting-agent .`, then `docker run --rm -v "$PWD/config:/config" -v "$PWD/data:/data" -e DISCORD_TOKEN -e GITHUB_TOKEN -e ANTHROPIC_API_KEY kb-meeting-agent`, with `data_dir: /data` in `config/config.yml`. The image transcribes on the CPU with faster-whisper. Stopping the container closes the running meeting first (second pass, minutes): give it time with `docker stop --time 600` (or `stop_grace_period` in Compose).
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| `403 Missing Access (50001)` at startup | the bot is not on the server given by `guild_id` |
+| The bot never joins; "voice connection timed out" | a channel or category override denies *Connect* |
+| "Unknown Integration" on a command | Discord cached old command ids: reload Discord (Ctrl+R) |
+| "Transcription is running N s behind" | the live model is too slow for the machine: use a smaller `transcription.live` model |
+| Phrases missing when people talk over each other | compare `utterances.jsonl` and `transcript.jsonl` in the meeting folder, and `stats.jsonl` for receive errors |
+
+Meeting folders live in `<data_dir>/meetings/<date>-<id>/`.
+
 ## How it behaves
 
 - **Answers** use only KB excerpts and cite them as `path#section`; when the KB does not cover the question, the agent says so.
@@ -149,6 +218,7 @@ The agent answers when one of `agent_names` appears in a segment (`scribe` in th
 ```bash
 uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
+(cd connector-discord && npm test)
 ```
 
 ## License

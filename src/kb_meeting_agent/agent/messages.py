@@ -14,6 +14,40 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "level_changed": "Intervention level: {level}.",
         "checks_paused": "Checks paused: the model is unavailable. Transcription continues.",
         "checks_resumed": "Checks resumed.",
+        "meeting_resumed": "Meeting resumed.",
+        "nothing_to_resume": "There is no unfinished meeting to resume.",
+        "retry_publish_done": "Published {count} kept pull request(s): {urls}",
+        "retry_publish_none": "Nothing to publish.",
+        "recording_notice": (
+            "This meeting is transcribed by an AI agent. Audio stays on the agent's machine "
+            "until the minutes are published, then it is deleted. The minutes and the validated "
+            "decisions will be proposed as pull requests in {repo}. Use /meeting optout to stop "
+            "transcribing your voice."
+        ),
+        "meeting_started": "Meeting started with the {kb} knowledge base.",
+        "meeting_already_running": "A meeting is already running.",
+        "join_voice_first": "Join a voice channel first.",
+        "unknown_kb": "Unknown knowledge base. Available: {names}.",
+        "no_meeting": "No meeting is running.",
+        "meeting_ending": "Ending the meeting: writing the minutes…",
+        "meeting_already_ending": "The meeting is already ending.",
+        "optout_done": (
+            "Your voice is no longer transcribed in this meeting and your recorded audio was "
+            "deleted. What you said before stays in the transcript."
+        ),
+        "command_failed": "The command failed; details are in the agent's log.",
+        "unknown_command": "Unknown command.",
+        "transcription_lag": "Transcription is running {seconds} s behind.",
+        "audio_interrupted": "Audio was interrupted from {start} to {end}.",
+        "edit_title": "Edit the decision",
+        "edit_label": "Decision",
+        "decision_number_taken": (
+            "Decision {number:04d} is now used on the base branch: {url} needs a new number "
+            "before it can be merged."
+        ),
+        "decision_branch_changed": (
+            "{url} was changed by someone else during the meeting; the agent left it as is."
+        ),
         "model_rejected": "The model rejected the request ({error}). Check the model configuration.",
         "excerpt_unanchored": (
             "The decision could not be matched to an exact line; transcript around it:"
@@ -57,6 +91,41 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "Vérifications en pause : le modèle est indisponible. La transcription continue."
         ),
         "checks_resumed": "Vérifications reprises.",
+        "meeting_resumed": "Réunion reprise.",
+        "nothing_to_resume": "Aucune réunion inachevée à reprendre.",
+        "retry_publish_done": "{count} pull request(s) conservée(s) publiée(s) : {urls}",
+        "retry_publish_none": "Rien à publier.",
+        "recording_notice": (
+            "Cette réunion est transcrite par un agent IA. L'audio reste sur la machine de "
+            "l'agent jusqu'à la publication du compte rendu, puis il est supprimé. Le compte "
+            "rendu et les décisions validées seront proposés en pull request dans {repo}. "
+            "Utilisez /meeting optout pour ne plus être transcrit."
+        ),
+        "meeting_started": "Réunion démarrée avec la base de connaissances {kb}.",
+        "meeting_already_running": "Une réunion est déjà en cours.",
+        "join_voice_first": "Rejoignez d'abord un salon vocal.",
+        "unknown_kb": "Base de connaissances inconnue. Disponibles : {names}.",
+        "no_meeting": "Aucune réunion en cours.",
+        "meeting_ending": "Clôture de la réunion : rédaction du compte rendu…",
+        "meeting_already_ending": "La réunion est déjà en cours de clôture.",
+        "optout_done": (
+            "Votre voix n'est plus transcrite dans cette réunion et votre audio enregistré a été "
+            "supprimé. Ce que vous avez dit avant reste dans la transcription."
+        ),
+        "command_failed": "La commande a échoué ; le détail est dans le journal de l'agent.",
+        "unknown_command": "Commande inconnue.",
+        "transcription_lag": "La transcription a {seconds} s de retard.",
+        "audio_interrupted": "L'audio a été interrompu de {start} à {end}.",
+        "edit_title": "Modifier la décision",
+        "edit_label": "Décision",
+        "decision_number_taken": (
+            "Le numéro {number:04d} est désormais pris sur la branche de base : {url} doit être "
+            "renumérotée avant d'être mergée."
+        ),
+        "decision_branch_changed": (
+            "{url} a été modifiée par quelqu'un d'autre pendant la réunion ; l'agent n'y a pas "
+            "touché."
+        ),
         "model_rejected": "Le modèle a refusé la requête ({error}). Vérifier sa configuration.",
         "excerpt_unanchored": (
             "La décision n'a pas pu être rattachée à une ligne précise ; transcription autour :"

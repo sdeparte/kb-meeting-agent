@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -38,8 +39,27 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("--level", choices=["silent", "contradictions", "context"])
     replay.add_argument("--auto-validate", action="store_true", help="validate every decision")
     replay.add_argument("--publish", action="store_true", help="open real pull requests")
+    live = commands.add_parser("run", help="join Discord meetings")
+    live.add_argument("--config", type=Path, default=Path("config.yml"))
     args = parser.parse_args(argv)
+    if args.command == "run":
+        return _run(args)
     return asyncio.run(_replay(args))
+
+
+def _run(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    missing = [name for name in ("discord", "transcription") if getattr(config, name) is None]
+    if missing:
+        print(f"run needs the {' and '.join(missing)} section(s) in {args.config}", file=sys.stderr)
+        return 2
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    from kb_meeting_agent.live.runner import run
+
+    asyncio.run(run(config))
+    return 0
 
 
 async def _replay(args: argparse.Namespace) -> int:

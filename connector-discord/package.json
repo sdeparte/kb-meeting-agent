@@ -1,0 +1,19 @@
+{
+  "name": "kb-meeting-agent-connector-discord",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Discord connector for kb-meeting-agent: relays per-speaker voice and chat interactions to the core.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=22.12" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.2",
+    "@snazzah/davey": "^0.1.12",
+    "discord.js": "^14.27.0"
+  }
+}

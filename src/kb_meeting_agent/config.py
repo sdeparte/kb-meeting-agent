@@ -80,12 +80,42 @@ class DefaultsConfig(_Strict):
     stale_page_days: int = 60
 
 
+class DiscordConfig(_Strict):
+    token: str
+    guild_id: str
+    node: str = "node"
+    connector_dir: Path | None = None
+
+
+class TranscriberRole(_Strict):
+    provider: Literal["mlx-whisper", "faster-whisper", "openai-compatible", "fake"]
+    model: str
+    base_url: str | None = None
+    api_key: str | None = None
+    device: str = "auto"
+    compute_type: str = "int8"
+    beam_size: int = Field(1, ge=1)
+
+
+class TranscriptionConfig(_Strict):
+    language: str | None = None
+    workers: int = Field(2, ge=1)
+    live: TranscriberRole
+    final: TranscriberRole | None = None
+    hallucination_phrases: list[str] = Field(default_factory=list)
+    min_utterance_seconds: float = Field(0.4, ge=0)
+    max_no_speech_prob: float = Field(0.6, ge=0, le=1)
+    vocabulary_max_chars: int = Field(600, ge=0)
+
+
 class AppConfig(_Strict):
     agent_names: list[str] = Field(default_factory=lambda: ["agent"])
     data_dir: Path = Path("~/.local/share/kb-meeting-agent")
     llm: LLMConfig
     knowledge_bases: dict[str, KbConfig]
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
+    discord: DiscordConfig | None = None
+    transcription: TranscriptionConfig | None = None
 
 
 def load_config(path: Path) -> AppConfig:

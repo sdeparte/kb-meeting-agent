@@ -62,3 +62,19 @@ knowledge_bases: {}
     transcript.write_text("", encoding="utf-8")
     assert main(["replay", str(transcript), "--config", str(config), "--kb", "nope"]) == 2
     assert "nope" in capsys.readouterr().err
+
+
+def test_run_needs_discord_and_transcription(tmp_path, capsys):
+    config = tmp_path / "config.yml"
+    config.write_text(
+        """
+llm:
+  fast: {provider: fake, model: fake}
+  strong: {provider: fake, model: fake}
+  embedding: {provider: fake, model: fake}
+knowledge_bases: {}
+""",
+        encoding="utf-8",
+    )
+    assert main(["run", "--config", str(config)]) == 2
+    assert "discord" in capsys.readouterr().err
