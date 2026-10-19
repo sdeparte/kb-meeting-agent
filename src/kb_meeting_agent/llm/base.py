@@ -67,16 +67,23 @@ def json_schema_for(model: type[Schema]) -> dict[str, Any]:
 
 
 _FENCED = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
+_THINK = re.compile(r"<think>.*?</think>", re.S)
 
 
 def extract_json(raw: str) -> str:
-    text = raw.strip()
+    """The JSON object in a model's answer, ignoring reasoning blocks, fences and prose."""
+    text = _THINK.sub("", raw).strip()
     fenced = _FENCED.match(text)
     if fenced:
         return fenced.group(1)
-    start, end = text.find("{"), text.rfind("}")
-    if start != -1 and end > start:
-        return text[start : end + 1]
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
+        try:
+            value, end = decoder.raw_decode(text, match.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return text[match.start() : end]
     return text
 
 

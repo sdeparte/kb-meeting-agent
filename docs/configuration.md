@@ -44,6 +44,7 @@ defaults:
 | `base_url` | `openai-compatible` only: the server's `/v1` URL |
 | `api_key` | API key; optional for local servers |
 | `effort` | `anthropic` only: `low`, `medium`, `high`, `xhigh` or `max` |
+| `request_options` | `openai-compatible` only: extra fields added to every request, as is. With Ollama, `{ reasoning_effort: "none" }` switches off the reasoning of models such as Qwen3, which otherwise thinks before every answer (about 20 s instead of under 1 s on a 16 GB Mac mini) |
 | `refusal_fallback` | `anthropic` only: when the model declines a request, let the API retry it on a fallback model (default `false`) |
 
 `embedding` must be `openai-compatible` (or `fake`): Anthropic has no embeddings endpoint, and the configuration is rejected otherwise. Changing the embedding model rebuilds the index on the next run.
