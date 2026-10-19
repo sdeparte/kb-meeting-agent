@@ -76,3 +76,16 @@ def test_fake_embedding_is_deterministic_and_normalized():
     a, b = fake_embedding("cooldown seconds"), fake_embedding("cooldown seconds")
     assert a == b
     assert abs(sum(x * x for x in a) - 1.0) < 1e-6
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '<think>The user wants {x} and maybe {y}.</think>\n{"items": [], "count": 1}',
+        '<think>\n</think>\n\n```json\n{"items": [], "count": 1}\n```',
+        'Thinking about {braces}... the answer: {"items": [], "count": 1}',
+    ],
+)
+async def test_complete_ignores_reasoning_before_the_json(raw):
+    provider = FakeProvider({"Bag": [raw]})
+    assert (await complete(provider, "sys", "user", Bag)).count == 1
