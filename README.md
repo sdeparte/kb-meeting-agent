@@ -53,10 +53,12 @@ ollama pull bge-m3      # embedding (multilingual)
 
 ```yaml
 llm:
-  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b" }
-  strong:    { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b" }
+  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none" } }
+  strong:    { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none" } }
   embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
 ```
+
+`reasoning_effort: "none"` switches off Qwen3's reasoning mode: otherwise it thinks before every answer, which turns a sub-second step into about 20 seconds. On a 16 GB machine, use `qwen3:8b` instead of `qwen3:14b`: it leaves room for live transcription.
 
 The agent requests JSON-schema structured output (`response_format: json_schema`). If your server rejects it, the agent reports "checks paused" and the reason is in the logs; use a server version that supports structured outputs.
 

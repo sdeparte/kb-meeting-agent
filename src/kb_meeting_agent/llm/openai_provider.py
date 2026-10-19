@@ -18,8 +18,10 @@ class OpenAICompatibleProvider:
         )
 
     async def complete_json(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        extra = {"extra_body": self._role.request_options} if self._role.request_options else {}
         try:
             response = await self._client.chat.completions.create(
+                **extra,
                 model=self._role.model,
                 messages=[
                     {"role": "system", "content": system},

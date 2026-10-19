@@ -46,6 +46,8 @@ class ModelRole(_Strict):
     api_key: str | None = None
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
     refusal_fallback: bool = False
+    # openai-compatible: extra request fields passed as is, e.g. {reasoning_effort: none}
+    request_options: dict[str, Any] = Field(default_factory=dict)
 
 
 class LLMConfig(_Strict):

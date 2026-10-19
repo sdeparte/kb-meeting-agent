@@ -133,3 +133,24 @@ async def test_openai_rate_limit_is_unavailable():
     role = ModelRole(provider="openai-compatible", model="m")
     with pytest.raises(LLMUnavailable, match="429"):
         await OpenAICompatibleProvider(role, client=client).complete_json("s", "u", SCHEMA)
+
+
+async def test_openai_compatible_passes_request_options_through():
+    completion = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Recorder(completion)))
+    role = ModelRole(
+        provider="openai-compatible",
+        model="qwen3:8b",
+        request_options={"reasoning_effort": "none"},
+    )
+    await OpenAICompatibleProvider(role, client=client).complete_json("sys", "u", SCHEMA)
+    assert client.chat.completions.kwargs["extra_body"] == {"reasoning_effort": "none"}
+    assert client.chat.completions.kwargs["messages"][0]["content"] == "sys"
+
+
+async def test_openai_compatible_sends_no_extra_body_by_default():
+    completion = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Recorder(completion)))
+    role = ModelRole(provider="openai-compatible", model="m")
+    await OpenAICompatibleProvider(role, client=client).complete_json("sys", "u", SCHEMA)
+    assert "extra_body" not in client.chat.completions.kwargs
