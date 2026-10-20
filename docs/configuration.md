@@ -137,6 +137,7 @@ decisions:
   filename: '{number:04d}-{slug}.md'
   template: .meeting-agent/decision.md
   default_status: acceptée
+  scopes: [client, serveur, les deux, KB]
   index:
     file: decisions/README.md
     row: '| [{number:04d}]({filename}) | {title} | {status} |'
@@ -169,6 +170,7 @@ minutes:
 | `filename` | `{number:04d}-{slug}.md` | file name. With `{number}`, the agent takes the next free number, counting the KB as synced at the start of the meeting, files added by open pull requests and numbers already used in the meeting. A record merged during the meeting is not counted. |
 | `template` | built-in English template | file in the KB used as the record template |
 | `default_status` | `accepted` | value of `{status}` |
+| `scopes` | `[]` (any) | allowed values of `{scope}`. The model is told the list; a case, accent or spacing variant is written with the listed spelling, any other answer is asked again once, then the record is not published and the channel is told (the decision stays pending). Empty: the model picks a scope in the KB's vocabulary. |
 | `index.file`, `index.row` | none | file the agent adds a row to, after the last table row of the file (code blocks ignored): keep the index as the file's last table |
 | `branch` | `decision/{date}-{slug}` | branch name; on GitHub, `-2` to `-9` is appended if it already exists. Dry runs and `unpublished/` reuse the name. |
 

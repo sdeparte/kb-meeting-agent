@@ -15,6 +15,7 @@ def test_defaults_when_file_is_missing(tmp_path):
     assert conv.decisions.filename == "{number:04d}-{slug}.md"
     assert conv.minutes.dir == "meetings"
     assert conv.statuses == []
+    assert conv.decisions.scopes == []
 
 
 def test_load_file(tmp_path):
@@ -26,6 +27,7 @@ statuses:
   - {pattern: '[PROD]', meaning: in_production}
 decisions:
   default_status: acceptée
+  scopes: [client, serveur, les deux]
   index: {file: decisions/README.md, row: '| {number} |'}
 minutes:
   dir: reunions
@@ -36,6 +38,7 @@ minutes:
     assert conv.language == "fr"
     assert conv.statuses[0].meaning == "in_production"
     assert conv.decisions.default_status == "acceptée"
+    assert conv.decisions.scopes == ["client", "serveur", "les deux"]
     assert conv.decisions.index.file == "decisions/README.md"
     assert conv.minutes.dir == "reunions"
 

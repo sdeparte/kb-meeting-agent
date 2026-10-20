@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import PurePosixPath
+from typing import Literal
+
+from pydantic import ConfigDict, field_validator
 
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_chunks
@@ -70,9 +74,36 @@ class DecisionDraft(Schema):
     related_pages: list[RelatedPage]
 
 
+def _scope_key(value: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    return " ".join(ascii_text.casefold().split())
+
+
+def _draft_model(scopes: Sequence[str]) -> type[DecisionDraft]:
+    """DecisionDraft whose scope must be one of `scopes`; case, accent and spacing variants
+    are mapped to the listed spelling, anything else fails validation (and is re-asked once)."""
+    if not scopes:
+        return DecisionDraft
+    listed = {_scope_key(scope): scope for scope in scopes}
+
+    class ScopedDecisionDraft(DecisionDraft):
+        model_config = ConfigDict(title="DecisionDraft")
+        scope: Literal[tuple(scopes)]  # type: ignore[valid-type]
+
+        @field_validator("scope", mode="before")
+        @classmethod
+        def _listed_spelling(cls, value: object) -> object:
+            return listed.get(_scope_key(value), value) if isinstance(value, str) else value
+
+    return ScopedDecisionDraft
+
+
+FREE_SCOPE = "scope (what it applies to, in the KB's vocabulary)"
+LISTED_SCOPE = "scope (what it applies to: exactly one of {scopes})"
+
 DRAFT_SYSTEM = """You write a decision record for a knowledge base, following the KB's own conventions below.
 Use only the decision statement, the transcript quote and the KB excerpts. Do not invent facts.
-Fields: title (short), slug (kebab-case, ASCII), scope (what it applies to, in the KB's vocabulary), context, decision, consequences (Markdown allowed), related_pages (KB pages this decision probably makes outdated: the path part of an excerpt's source, the section heading, one-sentence reason).
+Fields: title (short), slug (kebab-case, ASCII), {scope_field}, context, decision, consequences (Markdown allowed), related_pages (KB pages this decision probably makes outdated: the path part of an excerpt's source, the section heading, one-sentence reason).
 Write in language "{language}".
 
 KB CONVENTIONS:
@@ -87,13 +118,23 @@ async def draft_decision(
     chunks: list[Chunk],
     instructions: str,
     language: str,
+    scopes: Sequence[str] = (),
 ) -> DecisionDraft:
+    """Raises LLMInvalidOutput when the model keeps answering a scope outside `scopes`."""
     user = (
         f"DECISION: {statement}\n\nTRANSCRIPT QUOTE: {quote}\n\n"
         f"KB EXCERPTS:\n{format_chunks(chunks)}"
     )
-    system = DRAFT_SYSTEM.format(language=language, instructions=instructions or "(none)")
-    return await complete(strong, system, user, DecisionDraft)
+    scope_field = (
+        LISTED_SCOPE.format(scopes=", ".join(json.dumps(s, ensure_ascii=False) for s in scopes))
+        if scopes
+        else FREE_SCOPE
+    )
+    system = DRAFT_SYSTEM.format(
+        scope_field=scope_field, language=language, instructions=instructions or "(none)"
+    )
+    draft = await complete(strong, system, user, _draft_model(scopes))
+    return DecisionDraft.model_validate(draft.model_dump())
 
 
 @dataclass(frozen=True)

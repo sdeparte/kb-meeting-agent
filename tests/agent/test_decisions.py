@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from kb_meeting_agent.agent.decisions import (
     DecisionDraft,
     RelatedPage,
@@ -10,6 +12,7 @@ from kb_meeting_agent.agent.decisions import (
     slugify,
 )
 from kb_meeting_agent.conventions import DecisionConventions, IndexConfig
+from kb_meeting_agent.llm.base import LLMInvalidOutput
 from kb_meeting_agent.llm.fake import FakeProvider
 
 DRAFT = DecisionDraft(
@@ -109,6 +112,42 @@ async def test_draft_decision_passes_instructions_and_excerpts(kb):
     system, user = strong.calls[0][1], strong.calls[0][2]
     assert "Write in English." in system
     assert "ok on passe à 30" in user and "<excerpt" in user
+    assert "in the KB's vocabulary" in system
+
+
+async def scoped_draft(kb, *answers):
+    strong = FakeProvider({"DecisionDraft": [DRAFT.model_dump() | {"scope": a} for a in answers]})
+    draft = await draft_decision(
+        strong,
+        statement="Cooldown is 30 s",
+        quote="ok on passe à 30",
+        chunks=await kb.search("cooldown", k=2),
+        instructions="",
+        language="fr",
+        scopes=["client", "serveur", "les deux"],
+    )
+    return draft, strong
+
+
+async def test_draft_decision_lists_the_allowed_scopes(kb):
+    draft, strong = await scoped_draft(kb, "serveur")
+    assert type(draft) is DecisionDraft and draft.scope == "serveur"
+    system = strong.calls[0][1]
+    assert 'exactly one of "client", "serveur", "les deux"' in system
+    assert "in the KB's vocabulary" not in system
+
+
+async def test_draft_decision_maps_spelling_variants_to_the_listed_scope(kb):
+    draft, strong = await scoped_draft(kb, "  Les  DEUX ")
+    assert draft.scope == "les deux" and len(strong.calls) == 1
+
+
+async def test_draft_decision_asks_again_then_fails_on_an_unlisted_scope(kb):
+    draft, strong = await scoped_draft(kb, "backend", "client")
+    assert draft.scope == "client"
+    assert "not valid" in strong.calls[1][2] and "client" in strong.calls[1][2]
+    with pytest.raises(LLMInvalidOutput):
+        await scoped_draft(kb, "backend", "frontend")
 
 
 def test_append_table_row_ignores_code_fences():
