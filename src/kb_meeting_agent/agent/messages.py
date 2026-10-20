@@ -22,6 +22,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "nothing_to_resume": "There is no unfinished meeting to resume.",
         "retry_publish_done": "Published {count} kept pull request(s): {urls}",
         "retry_publish_none": "Nothing to publish.",
+        "retry_publish_number_taken": (
+            "Not published: decision number {number:04d} is now used in the KB ({branch}). "
+            "Its files stay in the agent's data folder."
+        ),
         "close_failed": (
             "Ending the meeting failed: no minutes were published. The transcript is kept on "
             "the agent's machine; details are in its log."
@@ -108,6 +112,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "nothing_to_resume": "Aucune réunion inachevée à reprendre.",
         "retry_publish_done": "{count} pull request(s) conservée(s) publiée(s) : {urls}",
         "retry_publish_none": "Rien à publier.",
+        "retry_publish_number_taken": (
+            "Non publiée : le numéro de décision {number:04d} est désormais pris dans la KB "
+            "({branch}). Ses fichiers restent dans le dossier de données de l'agent."
+        ),
         "close_failed": (
             "La clôture de la réunion a échoué : aucun compte rendu n'a été publié. La "
             "transcription est conservée sur la machine de l'agent ; le détail est dans son journal."

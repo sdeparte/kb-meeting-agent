@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from functools import cache
 from pathlib import PurePosixPath
@@ -73,18 +73,30 @@ def _table_cell(value: object) -> object:
     return " ".join(value.split()).replace("|", "\\|")
 
 
+def index_row(index: IndexConfig, values: Mapping[str, object]) -> str:
+    return render_template(index.row, {key: _table_cell(value) for key, value in values.items()})
+
+
 def index_files(
     index: IndexConfig | None, content: str | None, values: Mapping[str, object]
 ) -> dict[str, str]:
     """The index file with a row for `values`; nothing without an index, its file or a table."""
     if index is None or content is None:
         return {}
-    row = render_template(index.row, {key: _table_cell(value) for key, value in values.items()})
-    updated = append_table_row(content, row)
+    updated = append_table_row(content, index_row(index, values))
     if updated is None:
         log.warning("%s has no table: no index row added", index.file)
         return {}
     return {index.file: updated}
+
+
+def added_rows(
+    index: IndexConfig | None, files: Mapping[str, str], values: Mapping[str, object]
+) -> dict[str, str]:
+    """The row added to the index, by index file, if `files` carries the index."""
+    if index is None or index.file not in files:
+        return {}
+    return {index.file: index_row(index, values)}
 
 
 class RelatedPage(Schema):
@@ -165,12 +177,18 @@ async def draft_decision(
     return DecisionDraft.model_validate(draft.model_dump())
 
 
+INDEX_ROWS_FILE = "INDEX_ROWS.json"  # next to PR.md in a change kept locally
+
+
 @dataclass(frozen=True)
 class Change:
     branch: str
     files: dict[str, str]
     title: str
     body: str
+    # Row added to each index file in `files`: a change kept locally is rebuilt from it on
+    # the base of the day it is published, instead of resending a stale copy of the index.
+    index_rows: dict[str, str] = field(default_factory=dict)
 
 
 def _blockquote(text: str) -> str:
@@ -208,9 +226,8 @@ def build_decision_change(
     filename = render_template(conventions.filename, values)
     path = f"{conventions.dir.rstrip('/')}/{filename}"
     files = {path: render_template(template, values).rstrip() + "\n"}
-    files |= index_files(
-        conventions.index, index_content, values | {"filename": filename, "path": path}
-    )
+    row_values = values | {"filename": filename, "path": path}
+    files |= index_files(conventions.index, index_content, row_values)
     related = "\n".join(
         f"- `{page.path}` § {page.section} — {page.reason}" for page in draft.related_pages
     ) or t(language, "no_related_pages")
@@ -227,4 +244,5 @@ def build_decision_change(
         files=files,
         title=t(language, "decision_pr_title", title=draft.title),
         body=body,
+        index_rows=added_rows(conventions.index, files, row_values),
     )

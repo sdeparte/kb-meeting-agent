@@ -12,6 +12,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
+from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE, append_table_row, existing_numbers
 from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
@@ -564,30 +565,56 @@ class MeetingSession:
             await self._reply(msg, t(self._lang(), "retry_publish_none"))
             return
         publisher = self.deps.make_publisher(kb_config)
+        # The kept files were built on the KB of the meeting day: index rows are rebuilt on
+        # today's base, and a decision number taken since is not published.
+        kb = self.deps.make_kb(state["kb"], kb_config)
+        await kb.sync()
+        decisions_dir = kb.conventions.decisions.dir.rstrip("/") + "/"
+        taken = existing_numbers(
+            kb.list_files(decisions_dir) + await publisher.open_pr_paths(decisions_dir)
+        )
         kept = directory / "unpublished"
         urls: list[str] = []
+        lines: list[str] = []
         for description in sorted(kept.rglob("PR.md")):
             root = description.parent
+            branch = root.relative_to(kept).as_posix()
             heading, _, body = description.read_text(encoding="utf-8").partition("\n\n")
+            rows_file = root / INDEX_ROWS_FILE
+            rows = json.loads(rows_file.read_text(encoding="utf-8")) if rows_file.exists() else {}
             files = {
                 path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
                 for path in root.rglob("*")
-                if path.is_file() and path != description
+                if path.is_file() and path not in (description, rows_file)
             }
-            try:
-                pr = await publisher.open_pr(
-                    root.relative_to(kept).as_posix(), files, heading.removeprefix("# "), body
+            numbers = existing_numbers(
+                path for path in files if path.startswith(decisions_dir) and path not in rows
+            )
+            if clash := sorted(numbers & taken):
+                lines.append(
+                    t(self._lang(), "retry_publish_number_taken", number=clash[0], branch=branch)
                 )
+                continue
+            for index_file, row in rows.items():
+                current = kb.read(index_file) if kb.exists(index_file) else None
+                rebuilt = append_table_row(current, row) if current is not None else None
+                if rebuilt is None:
+                    log.warning("%s has no table any more: no index row added", index_file)
+                    files.pop(index_file, None)
+                else:
+                    files[index_file] = rebuilt
+            try:
+                pr = await publisher.open_pr(branch, files, heading.removeprefix("# "), body)
             except Exception:
                 log.exception("republishing %s failed", root)
                 continue
             shutil.rmtree(root)
             urls.append(pr.url)
         if urls:
-            text = t(self._lang(), "retry_publish_done", count=len(urls), urls=", ".join(urls))
-        else:
-            text = t(self._lang(), "retry_publish_none")
-        await self._reply(msg, text)
+            lines.insert(
+                0, t(self._lang(), "retry_publish_done", count=len(urls), urls=", ".join(urls))
+            )
+        await self._reply(msg, "\n".join(lines) or t(self._lang(), "retry_publish_none"))
 
     # -- meeting lifecycle ---------------------------------------------------------------
 
