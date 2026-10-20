@@ -36,6 +36,7 @@ class DecisionConventions(_Strict):
     filename: str = "{number:04d}-{slug}.md"
     template: str | None = None
     default_status: str = "accepted"
+    scopes: list[str] = Field(default_factory=list)  # empty: any scope the model writes
     index: IndexConfig | None = None
     branch: str = "decision/{date}-{slug}"
 
