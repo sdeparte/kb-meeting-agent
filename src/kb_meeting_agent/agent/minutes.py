@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from itertools import groupby
 
-from kb_meeting_agent.agent.decisions import Change, append_table_row, slugify
+from kb_meeting_agent.agent.decisions import Change, index_files, slugify
 from kb_meeting_agent.agent.factcheck import Flag
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_segments, format_timestamp
@@ -105,12 +105,10 @@ def build_minutes_change(
     filename = render_template(conventions.filename, values)
     path = f"{conventions.dir.rstrip('/')}/{filename}"
     files = {path: render_template(template, values).rstrip() + "\n"}
-    if conventions.index and index_content is not None:
-        row_values = {key: value for key, value in values.items() if key != "body"}
-        row = render_template(
-            conventions.index.row, row_values | {"filename": filename, "path": path}
-        )
-        files[conventions.index.file] = append_table_row(index_content, row)
+    row_values = {key: value for key, value in values.items() if key != "body"}
+    files |= index_files(
+        conventions.index, index_content, row_values | {"filename": filename, "path": path}
+    )
     return Change(
         branch=render_template(conventions.branch, values),
         files=files,

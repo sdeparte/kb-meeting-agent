@@ -31,6 +31,7 @@ from kb_meeting_agent.agent.minutes import DecisionRecord, build_minutes_change,
 from kb_meeting_agent.agent.prompting import format_segments
 from kb_meeting_agent.agent.transcript import Transcript
 from kb_meeting_agent.config import InterventionLevel
+from kb_meeting_agent.conventions import IndexConfig
 from kb_meeting_agent.kb.quote import quote_exists
 from kb_meeting_agent.llm.base import (
     LLMConfigError,
@@ -390,14 +391,13 @@ class MeetingAgent:
         }
         await self._say(t(self._lang, "decision_published", user=user, url=pr.url))
 
+    def _index_content(self, index: IndexConfig | None) -> str | None:
+        return self.kb.read(index.file) if index and self.kb.exists(index.file) else None
+
     def _decision_change(
         self, draft: DecisionDraft, number: int | None, quote: str, user: str, note: str
     ) -> Change:
         conventions = self.kb.conventions.decisions
-        index_file = conventions.index.file if conventions.index else None
-        index_content = (
-            self.kb.read(index_file) if index_file and self.kb.exists(index_file) else None
-        )
         return build_decision_change(
             conventions=conventions,
             template=self.kb.template("decision"),
@@ -406,7 +406,7 @@ class MeetingAgent:
             meeting_date=self.settings.meeting_date,
             quote=quote,
             validated_by=user,
-            index_content=index_content,
+            index_content=self._index_content(conventions.index),
             language=self._lang,
             excerpt_note=note,
         )
@@ -509,7 +509,6 @@ class MeetingAgent:
             return None
         participants = sorted({s.speaker_name for s in segments})
         conventions = self.kb.conventions.minutes
-        index_file = conventions.index.file if conventions.index else None
         change = build_minutes_change(
             conventions=conventions,
             template=self.kb.template("minutes"),
@@ -517,9 +516,7 @@ class MeetingAgent:
             meeting_date=self.settings.meeting_date,
             participants=participants,
             language=self._lang,
-            index_content=(
-                self.kb.read(index_file) if index_file and self.kb.exists(index_file) else None
-            ),
+            index_content=self._index_content(conventions.index),
         )
         pr = await self._open_pr(change)
         if not isinstance(pr, PrRef):

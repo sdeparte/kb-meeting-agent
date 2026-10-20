@@ -5,14 +5,16 @@ import pytest
 from kb_meeting_agent.agent.decisions import (
     DecisionDraft,
     RelatedPage,
+    _draft_model,
     append_table_row,
     build_decision_change,
     draft_decision,
+    index_files,
     next_number,
     slugify,
 )
 from kb_meeting_agent.conventions import DecisionConventions, IndexConfig
-from kb_meeting_agent.llm.base import LLMInvalidOutput
+from kb_meeting_agent.llm.base import LLMInvalidOutput, json_schema_for
 from kb_meeting_agent.llm.fake import FakeProvider
 
 DRAFT = DecisionDraft(
@@ -48,7 +50,7 @@ def test_append_table_row_after_last_row():
     assert (
         append_table_row(content, "| 2 |") == "# T\n\n| a |\n|---|\n| 1 |\n| 2 |\n\nFooter text.\n"
     )
-    assert append_table_row("No table\n", "| 2 |") == "No table\n| 2 |\n"
+    assert append_table_row("No table\n", "| 2 |") is None
 
 
 def test_build_numbered_change_with_index():
@@ -115,7 +117,7 @@ async def test_draft_decision_passes_instructions_and_excerpts(kb):
     assert "in the KB's vocabulary" in system
 
 
-async def scoped_draft(kb, *answers):
+async def scoped_draft(kb, *answers, scopes=("client", "serveur", "les deux")):
     strong = FakeProvider({"DecisionDraft": [DRAFT.model_dump() | {"scope": a} for a in answers]})
     draft = await draft_decision(
         strong,
@@ -124,7 +126,7 @@ async def scoped_draft(kb, *answers):
         chunks=await kb.search("cooldown", k=2),
         instructions="",
         language="fr",
-        scopes=["client", "serveur", "les deux"],
+        scopes=list(scopes),
     )
     return draft, strong
 
@@ -148,6 +150,31 @@ async def test_draft_decision_asks_again_then_fails_on_an_unlisted_scope(kb):
     assert "not valid" in strong.calls[1][2] and "client" in strong.calls[1][2]
     with pytest.raises(LLMInvalidOutput):
         await scoped_draft(kb, "backend", "frontend")
+
+
+async def test_draft_decision_keeps_scopes_in_other_scripts_apart(kb):
+    draft, _ = await scoped_draft(kb, "клиент", scopes=["клиент", "сервер"])
+    assert draft.scope == "клиент"
+    with pytest.raises(LLMInvalidOutput):
+        await scoped_draft(kb, "хз", "—", scopes=["клиент", "сервер"])
+
+
+async def test_draft_decision_schema_lists_a_single_scope_as_an_enum(kb):
+    draft, _ = await scoped_draft(kb, "kb", scopes=["KB"])
+    assert draft.scope == "KB"
+    scope = json_schema_for(_draft_model(("KB",)))["properties"]["scope"]
+    assert scope["enum"] == ["KB"] and "const" not in scope
+
+
+def test_index_files_escapes_cells_and_skips_a_file_without_table():
+    index = IndexConfig(file="README.md", row="| {number:04d} | {title} |")
+    values = {"number": 3, "title": "Sync | Q4\nfollow-up"}
+    assert index_files(index, "| # | T |\n|---|---|\n", values) == {
+        "README.md": "| # | T |\n|---|---|\n| 0003 | Sync \\| Q4 follow-up |\n"
+    }
+    assert index_files(index, "# Index\n\n- rules\n", values) == {}
+    assert index_files(index, None, values) == {}
+    assert index_files(None, "| a |\n", values) == {}
 
 
 def test_append_table_row_ignores_code_fences():
