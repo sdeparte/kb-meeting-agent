@@ -1,7 +1,9 @@
 import pytest
+from pydantic import ValidationError
 
 from kb_meeting_agent.conventions import (
     CONVENTIONS_FILE,
+    DecisionConventions,
     load_conventions,
     load_template,
     render_template,
@@ -44,6 +46,12 @@ minutes:
     assert conv.decisions.index.file == "decisions/README.md"
     assert conv.minutes.dir == "reunions"
     assert conv.minutes.index.row == "| {date} | [{title}]({filename}) |"
+
+
+def test_scopes_must_differ_by_more_than_case_accents_or_spacing():
+    assert DecisionConventions(scopes=["клиент", "сервер", "les deux"]).scopes[0] == "клиент"
+    with pytest.raises(ValidationError, match="differ only by"):
+        DecisionConventions(scopes=["Serveur", "sérveur"])
 
 
 def test_render_template_formats_known_keys_and_keeps_the_rest():
