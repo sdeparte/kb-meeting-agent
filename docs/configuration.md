@@ -57,6 +57,7 @@ defaults:
 | `base_branch` | `main` | branch the agent reads and opens pull requests against |
 | `token` | none | GitHub token; required for `--publish` and for a private KB. Permissions: Contents and Pull requests, read and write. |
 | `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to `https://github.com/` URLs. |
+| `language` | `en` | language of the agent's messages, pull requests and generated documents when the KB's `.meeting-agent.yml` does not set `language` (the KB's own setting wins) |
 
 ### `defaults`
 

@@ -37,7 +37,7 @@ class GitMarkdownKnowledgeBase:
         self.repo_dir = data_dir / "kb" / name / "repo"
         self._index = SearchIndex(data_dir / "kb" / name / "index.sqlite", embed)
         self._embedding_model = embedding_model
-        self._conventions = KbConventions()
+        self._conventions = self._with_language(KbConventions())
 
     @property
     def conventions(self) -> KbConventions:
@@ -48,8 +48,14 @@ class GitMarkdownKnowledgeBase:
 
     async def sync(self) -> None:
         await asyncio.to_thread(self._git_sync)
-        self._conventions = load_conventions(self.repo_dir)
+        self._conventions = self._with_language(load_conventions(self.repo_dir))
         await self._reindex()
+
+    def _with_language(self, conventions: KbConventions) -> KbConventions:
+        """The KB's own `language` wins; the instance's setting only fills in when it is absent."""
+        if "language" in conventions.model_fields_set or not self._config.language:
+            return conventions
+        return conventions.model_copy(update={"language": self._config.language})
 
     async def search(self, query: str, k: int = 8) -> list[Chunk]:
         return await self._index.search(query, k=k, boost_paths=self._conventions.authoritative)

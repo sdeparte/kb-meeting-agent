@@ -50,6 +50,21 @@ async def test_changing_embedding_model_rebuilds_the_index(tmp_path, kb_origin):
     second.close()
 
 
+async def test_language_falls_back_to_the_instance_setting(tmp_path, kb_origin):
+    commit_file(kb_origin, ".meeting-agent.yml", None)
+    config = KbConfig(repo="acme/kb", clone_url=str(kb_origin), language="fr")
+    knowledge_base = GitMarkdownKnowledgeBase(
+        "t", config, tmp_path / "d", FakeProvider().embed, "m"
+    )
+    assert knowledge_base.conventions.language == "fr"
+    await knowledge_base.sync()
+    assert knowledge_base.conventions.language == "fr"
+    commit_file(kb_origin, ".meeting-agent.yml", "language: de\n")
+    await knowledge_base.sync()
+    assert knowledge_base.conventions.language == "de"
+    knowledge_base.close()
+
+
 def test_token_is_scoped_to_github_and_kept_out_of_argv(tmp_path):
     config = KbConfig(repo="acme/kb", token="s3cret")
     knowledge_base = GitMarkdownKnowledgeBase(
