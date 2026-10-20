@@ -104,6 +104,19 @@ async def test_decision_is_proposed_then_published_on_button(make_agent):
     assert sink.texts()[-1].endswith("https://example.test/pull/1")
 
 
+async def test_unlisted_scope_publishes_nothing_and_keeps_the_decision_pending(make_agent, kb):
+    decisions = kb.conventions.decisions.model_copy(update={"scopes": ["client", "serveur"]})
+    kb._conventions = kb.conventions.model_copy(update={"decisions": decisions})
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT, DRAFT]})  # "backend", twice
+    agent, _, _, publisher, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    assert publisher.prs == []
+    assert agent.decisions["d1"].state == "pending"
+    assert "Nothing was published" in sink.texts()[-1]
+
+
 async def test_duplicate_decision_is_proposed_once(make_agent):
     fast = FakeProvider(
         {"Extraction": [extraction(decisions=[DECISION]), extraction(decisions=[DECISION])]}
@@ -229,6 +242,9 @@ async def test_end_publishes_minutes_with_decision_links(make_agent):
     branch, files, *_ = publisher.prs[-1]
     assert branch == "meetings/2026-10-15-weekly"
     assert "meetings/2026-10-15-weekly.md" in files
+    assert files["meetings/README.md"].endswith(
+        "|---|---|---|\n| 2026-10-15 | [Weekly](2026-10-15-weekly.md) | Alice |\n"
+    )
     assert "https://example.test/pull/1" in strong.calls_for("MinutesDraft")[0][2]
     assert pr.url == "https://example.test/pull/2"
     assert sink.texts()[-1] == "Meeting minutes: https://example.test/pull/2"

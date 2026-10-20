@@ -30,6 +30,7 @@ decisions:
 minutes:
   dir: meetings
   filename: '{date}-{slug}.md'
+  index: {file: meetings/README.md, row: '| {date} | [{title}]({filename}) | {participants} |'}
   branch: 'meetings/{date}-{slug}'
 """,
     ".meeting-agent/decision.md": (
@@ -56,6 +57,7 @@ minutes:
         "| [0001](0001-rest.md) | REST | accepted |\n"
         "| [0002](0002-redis.md) | Redis | accepted |\n"
     ),
+    "meetings/README.md": "# Meetings\n\n| Date | Minutes | Participants |\n|---|---|---|\n",
     "decisions/0001-rest.md": "# 0001 — REST\n\nUse REST.\n",
     "decisions/0002-redis.md": "# 0002 — Redis\n\nUse Redis.\n",
     "mockups/screen.md": "# Mockup\n\nCOOLDOWN_SECONDS 999\n",

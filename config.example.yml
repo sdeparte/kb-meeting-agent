@@ -16,6 +16,8 @@ knowledge_bases:
     repo: owner/my-kb
     base_branch: main
     token: "${GITHUB_TOKEN}"   # needed to publish or to read a private KB; remove otherwise
+    # Language, decision record format and allowed scopes, minutes folder and index: these
+    # belong to the KB, in its .meeting-agent.yml (docs/configuration.md#kb-conventions-meeting-agentyml).
 
 defaults:
   intervention_level: contradictions
