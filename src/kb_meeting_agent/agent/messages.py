@@ -11,6 +11,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "decision_detected": "Decision detected: *{statement}*",
         "decision_published": "Decision validated by {user}: {url}",
         "decision_ignored": "Decision ignored by {user}.",
+        "decision_draft_failed": (
+            "Could not write the decision record: the model did not give a usable answer (the "
+            "agent's log has the details). Nothing was published; validate again to retry."
+        ),
         "level_changed": "Intervention level: {level}.",
         "checks_paused": "Checks paused: the model is unavailable. Transcription continues.",
         "checks_resumed": "Checks resumed.",
@@ -90,6 +94,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "decision_detected": "Décision détectée : *{statement}*",
         "decision_published": "Décision validée par {user} : {url}",
         "decision_ignored": "Décision ignorée par {user}.",
+        "decision_draft_failed": (
+            "Impossible de rédiger la fiche de décision : le modèle n'a pas donné de réponse "
+            "exploitable (détails dans le journal de l'agent). Rien n'a été publié ; validez à "
+            "nouveau pour réessayer."
+        ),
         "level_changed": "Niveau d'intervention : {level}.",
         "checks_paused": (
             "Vérifications en pause : le modèle est indisponible. La transcription continue."

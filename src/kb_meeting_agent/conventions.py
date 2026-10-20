@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from importlib import resources
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 CONVENTIONS_FILE = ".meeting-agent.yml"
 
 StatusMeaning = Literal["in_production", "in_progress", "planned", "rejected"]
+
+
+def fold(text: str) -> str:
+    """The text without accents: NFKD with the combining marks removed, other scripts kept."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
+def scope_key(scope: str) -> str:
+    """Two spellings of a scope with the same key are the same scope (case, accents, spacing)."""
+    return " ".join(fold(scope).casefold().split())
 
 
 class _Strict(BaseModel):
@@ -36,14 +47,29 @@ class DecisionConventions(_Strict):
     filename: str = "{number:04d}-{slug}.md"
     template: str | None = None
     default_status: str = "accepted"
+    scopes: list[str] = Field(default_factory=list)  # empty: any scope the model writes
     index: IndexConfig | None = None
     branch: str = "decision/{date}-{slug}"
+
+    @field_validator("scopes")
+    @classmethod
+    def _distinct_scopes(cls, scopes: list[str]) -> list[str]:
+        seen: dict[str, str] = {}
+        for scope in scopes:
+            key = scope_key(scope)
+            if key in seen:
+                raise ValueError(
+                    f"scopes {seen[key]!r} and {scope!r} differ only by case, accents or spacing"
+                )
+            seen[key] = scope
+        return scopes
 
 
 class MinutesConventions(_Strict):
     dir: str = "meetings"
     filename: str = "{date}-{slug}.md"
     template: str | None = None
+    index: IndexConfig | None = None
     branch: str = "meetings/{date}-{slug}"
 
 
