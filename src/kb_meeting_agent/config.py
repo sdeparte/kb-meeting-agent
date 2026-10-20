@@ -70,6 +70,7 @@ class KbConfig(_Strict):
     base_branch: str = "main"
     token: str | None = None
     clone_url: str | None = None
+    language: str | None = None  # used when the KB's .meeting-agent.yml does not set one
 
 
 class DefaultsConfig(_Strict):
