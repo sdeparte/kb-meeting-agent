@@ -29,3 +29,18 @@ async def test_dry_run_refuses_paths_outside_its_directory(tmp_path):
         await publisher.open_pr("../../escape", {"a.md": "x"}, "T", "B")
     assert not (tmp_path / "escape.md").exists()
     assert not list(tmp_path.glob("escape*"))
+
+
+async def test_dry_run_update_branch_rewrites_files(tmp_path):
+    publisher = DryRunPublisher(tmp_path)
+    pr = await publisher.open_pr("decision/x", {"a.md": "v1"}, "T", "B")
+    assert await publisher.is_open(pr)
+    assert await publisher.update_branch("decision/x", {"a.md": "v2"}, "T", "h") == "h"
+    assert (tmp_path / "decision/x/a.md").read_text(encoding="utf-8") == "v2"
+
+
+async def test_dry_run_can_hide_local_paths(tmp_path):
+    publisher = DryRunPublisher(tmp_path, local_urls=False)
+    pr = await publisher.open_pr("decision/x", {"a.md": "v1"}, "T", "B")
+    assert pr.url == "dry run: decision/x"
+    assert str(tmp_path) not in pr.url

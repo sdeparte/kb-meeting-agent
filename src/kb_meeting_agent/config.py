@@ -46,6 +46,8 @@ class ModelRole(_Strict):
     api_key: str | None = None
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
     refusal_fallback: bool = False
+    # openai-compatible: extra request fields passed as is, e.g. {reasoning_effort: none}
+    request_options: dict[str, Any] = Field(default_factory=dict)
 
 
 class LLMConfig(_Strict):
@@ -68,6 +70,7 @@ class KbConfig(_Strict):
     base_branch: str = "main"
     token: str | None = None
     clone_url: str | None = None
+    language: str | None = None  # used when the KB's .meeting-agent.yml does not set one
 
 
 class DefaultsConfig(_Strict):
@@ -80,12 +83,44 @@ class DefaultsConfig(_Strict):
     stale_page_days: int = 60
 
 
+class DiscordConfig(_Strict):
+    token: str
+    guild_id: str
+    node: str = "node"
+    connector_dir: Path | None = None
+
+
+class TranscriberRole(_Strict):
+    provider: Literal["mlx-whisper", "faster-whisper", "openai-compatible", "fake"]
+    model: str
+    base_url: str | None = None
+    api_key: str | None = None
+    device: str = "auto"
+    compute_type: str = "int8"
+    beam_size: int = Field(1, ge=1)
+
+
+class TranscriptionConfig(_Strict):
+    language: str | None = None
+    workers: int = Field(2, ge=1)
+    live: TranscriberRole
+    final: TranscriberRole | None = None
+    hallucination_phrases: list[str] = Field(default_factory=list)
+    min_utterance_seconds: float = Field(0.4, ge=0)
+    max_no_speech_prob: float = Field(0.6, ge=0, le=1)
+    min_voiced_seconds: float = Field(0.2, ge=0)
+    min_avg_logprob: float | None = -1.0
+    vocabulary_max_chars: int = Field(600, ge=0)
+
+
 class AppConfig(_Strict):
     agent_names: list[str] = Field(default_factory=lambda: ["agent"])
     data_dir: Path = Path("~/.local/share/kb-meeting-agent")
     llm: LLMConfig
     knowledge_bases: dict[str, KbConfig]
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
+    discord: DiscordConfig | None = None
+    transcription: TranscriptionConfig | None = None
 
 
 def load_config(path: Path) -> AppConfig:

@@ -1,7 +1,9 @@
 import pytest
+from pydantic import ValidationError
 
 from kb_meeting_agent.conventions import (
     CONVENTIONS_FILE,
+    DecisionConventions,
     load_conventions,
     load_template,
     render_template,
@@ -14,7 +16,9 @@ def test_defaults_when_file_is_missing(tmp_path):
     assert conv.decisions.dir == "decisions"
     assert conv.decisions.filename == "{number:04d}-{slug}.md"
     assert conv.minutes.dir == "meetings"
+    assert conv.minutes.index is None
     assert conv.statuses == []
+    assert conv.decisions.scopes == []
 
 
 def test_load_file(tmp_path):
@@ -26,9 +30,11 @@ statuses:
   - {pattern: '[PROD]', meaning: in_production}
 decisions:
   default_status: acceptée
+  scopes: [client, serveur, les deux]
   index: {file: decisions/README.md, row: '| {number} |'}
 minutes:
   dir: reunions
+  index: {file: reunions/README.md, row: '| {date} | [{title}]({filename}) |'}
 """,
         encoding="utf-8",
     )
@@ -36,8 +42,16 @@ minutes:
     assert conv.language == "fr"
     assert conv.statuses[0].meaning == "in_production"
     assert conv.decisions.default_status == "acceptée"
+    assert conv.decisions.scopes == ["client", "serveur", "les deux"]
     assert conv.decisions.index.file == "decisions/README.md"
     assert conv.minutes.dir == "reunions"
+    assert conv.minutes.index.row == "| {date} | [{title}]({filename}) |"
+
+
+def test_scopes_must_differ_by_more_than_case_accents_or_spacing():
+    assert DecisionConventions(scopes=["клиент", "сервер", "les deux"]).scopes[0] == "клиент"
+    with pytest.raises(ValidationError, match="differ only by"):
+        DecisionConventions(scopes=["Serveur", "sérveur"])
 
 
 def test_render_template_formats_known_keys_and_keeps_the_rest():

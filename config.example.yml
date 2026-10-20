@@ -16,8 +16,20 @@ knowledge_bases:
     repo: owner/my-kb
     base_branch: main
     token: "${GITHUB_TOKEN}"   # needed to publish or to read a private KB; remove otherwise
+    # Language, decision record format and allowed scopes, minutes folder and index: these
+    # belong to the KB, in its .meeting-agent.yml (docs/configuration.md#kb-conventions-meeting-agentyml).
 
 defaults:
   intervention_level: contradictions
   contradiction_min_confidence: 0.8
   stale_page_days: 60
+
+# For `kb-meeting-agent run` (Discord):
+# discord:
+#   token: "${DISCORD_TOKEN}"
+#   guild_id: "123456789012345678"
+#
+# transcription:
+#   language: fr
+#   live:  { provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo }
+#   final: { provider: mlx-whisper, model: mlx-community/whisper-large-v3-mlx }
