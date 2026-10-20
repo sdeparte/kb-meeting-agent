@@ -1,7 +1,9 @@
+import json
 from datetime import date
 
 import httpx
 import pytest
+from conftest import commit_file
 
 from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.transcript import Transcript
@@ -100,6 +102,19 @@ async def test_decision_is_proposed_then_published_on_button(make_agent):
     assert "reference/configuration.md" in body and "nope.md" not in body
     assert agent.decisions["d1"].state == "validated"
     assert sink.texts()[-1].endswith("https://example.test/pull/1")
+
+
+async def test_unlisted_scope_publishes_nothing_and_keeps_the_decision_pending(make_agent, kb):
+    decisions = kb.conventions.decisions.model_copy(update={"scopes": ["client", "serveur"]})
+    kb._conventions = kb.conventions.model_copy(update={"decisions": decisions})
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT, DRAFT]})  # "backend", twice
+    agent, _, _, publisher, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    assert publisher.prs == []
+    assert agent.decisions["d1"].state == "pending"
+    assert "Nothing was published" in sink.texts()[-1]
 
 
 async def test_duplicate_decision_is_proposed_once(make_agent):
@@ -227,6 +242,9 @@ async def test_end_publishes_minutes_with_decision_links(make_agent):
     branch, files, *_ = publisher.prs[-1]
     assert branch == "meetings/2026-10-15-weekly"
     assert "meetings/2026-10-15-weekly.md" in files
+    assert files["meetings/README.md"].endswith(
+        "|---|---|---|\n| 2026-10-15 | [Weekly](2026-10-15-weekly.md) | Alice |\n"
+    )
     assert "https://example.test/pull/1" in strong.calls_for("MinutesDraft")[0][2]
     assert pr.url == "https://example.test/pull/2"
     assert sink.texts()[-1] == "Meeting minutes: https://example.test/pull/2"
@@ -402,3 +420,115 @@ async def test_publish_error_shows_only_its_public_summary(make_agent):
     await agent.on_button("decision:d1:validate", "Bob")
     assert "GitHub 500" in sink.texts()[-1]
     assert "ghe.internal" not in "".join(sink.texts())
+
+
+async def test_late_segments_are_still_extracted(make_agent):
+    fast = FakeProvider()
+    agent, *_ = make_agent(fast)
+    await agent.on_segment(seg(0, "first"))  # 0-31: extracted
+    await agent.on_segment(Segment("b", "Bob", 10, 20, "late one"))  # ends before the last cut
+    await agent.on_segment(seg(40, "third"))  # 40-71: next extraction
+    second = fast.calls_for("Extraction")[1][2].split("NEW:\n", 1)[1]
+    assert "late one" in second and "third" in second
+
+
+async def test_edit_button_carries_a_modal_and_modal_submit_validates(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, _, strong, publisher, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    edit = sink.messages[-1].buttons[1]
+    assert edit.modal.value == "Cooldown is 30 seconds"
+    await agent.on_modal("decision:d1:edit", "Cooldown is 25 seconds", "Bob")
+    assert "Cooldown is 25 seconds" in strong.calls_for("DecisionDraft")[0][2]
+    assert len(publisher.prs) == 1
+
+
+async def test_set_level_and_ask(make_agent):
+    fast = FakeProvider({"Queries": [{"queries": ["cooldown"]}]})
+    strong = FakeProvider(
+        {
+            "Answer": [
+                {
+                    "covered": True,
+                    "answer": "45 s.",
+                    "sources": ["reference/configuration.md#Neutralization"],
+                }
+            ]
+        }
+    )
+    agent, *_, sink = make_agent(fast, strong)
+    await agent.set_level("context", announce=False)
+    assert agent.level == "context" and sink.messages == []
+    assert (await agent.ask("What is the cooldown?")).startswith("45 s.")
+
+
+async def test_snapshot_round_trip(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, *_ = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    state = json.loads(json.dumps(agent.snapshot()))
+    clone, *_ = make_agent()
+    clone.restore(state)
+    assert clone.snapshot() == state
+    assert clone.decisions["d1"].pr.url == "https://example.test/pull/1"
+    assert clone.decisions["d1"].excerpt[0].text == "ok on passe à 30"
+
+
+async def test_end_sorts_segments_and_reports_gaps(make_agent):
+    strong = FakeProvider({"MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}]})
+    agent, _, strong, *_ = make_agent(strong=strong, extraction_interval_s=1000)
+    await agent.on_segment(seg(0, "a"))
+    late = Segment("b", "Bob", 700, 705, "b")
+    early = Segment("c", "Carol", 5, 9, "c")
+    await agent.end(segments=[late, early], gaps=[(60.0, 75.0)])
+    assert len(strong.calls_for("SliceSummary")) == 2
+    assert "00:01:00" in strong.calls_for("MinutesDraft")[0][2]
+
+
+async def test_refresh_rebuilds_open_decision_prs_on_the_current_base(make_agent, kb, kb_origin):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, _, _, publisher, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    readme = (kb_origin / "decisions/README.md").read_text(encoding="utf-8")
+    commit_file(
+        kb_origin, "decisions/README.md", readme + "| [0009](0009-other.md) | Other | accepted |\n"
+    )
+    commit_file(kb_origin, "decisions/0009-other.md", "# 0009 — Other\n")
+    await kb.sync()
+    await agent.refresh_decision_prs()
+    branch, files, message = publisher.updates[0]
+    assert branch == publisher.prs[0][0]
+    assert publisher.update_heads == ["sha1"]
+    assert agent.decisions["d1"].pr.head == "sha1+"
+    assert "| [0009](0009-other.md)" in files["decisions/README.md"]
+    assert files["decisions/README.md"].rstrip().endswith("| Cooldown at 30 s | accepted |")
+
+
+async def test_refresh_reports_a_number_taken_on_the_base(make_agent, kb, kb_origin):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, _, _, publisher, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    commit_file(kb_origin, "decisions/0003-someone-else.md", "# 0003 — Someone else\n")
+    await kb.sync()
+    await agent.refresh_decision_prs()
+    assert publisher.updates == []
+    assert "0003" in sink.texts()[-1]
+
+
+async def test_refresh_leaves_a_branch_changed_by_someone_else(make_agent, kb, kb_origin):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, _, _, publisher, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    publisher.moved.add(publisher.prs[0][0])
+    await agent.refresh_decision_prs()
+    assert publisher.updates == []
+    assert "changed by someone else" in sink.texts()[-1]

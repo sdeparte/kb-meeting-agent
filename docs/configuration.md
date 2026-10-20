@@ -44,6 +44,7 @@ defaults:
 | `base_url` | `openai-compatible` only: the server's `/v1` URL |
 | `api_key` | API key; optional for local servers |
 | `effort` | `anthropic` only: `low`, `medium`, `high`, `xhigh` or `max` |
+| `request_options` | `openai-compatible` only: extra fields added to every request, as is. With Ollama, `{ reasoning_effort: "none" }` switches off the reasoning of models such as Qwen3, which otherwise thinks before every answer (about 20 s instead of under 1 s on a 16 GB Mac mini) |
 | `refusal_fallback` | `anthropic` only: when the model declines a request, let the API retry it on a fallback model (default `false`) |
 
 `embedding` must be `openai-compatible` (or `fake`): Anthropic has no embeddings endpoint, and the configuration is rejected otherwise. Changing the embedding model rebuilds the index on the next run.
@@ -56,6 +57,7 @@ defaults:
 | `base_branch` | `main` | branch the agent reads and opens pull requests against |
 | `token` | none | GitHub token; required for `--publish` and for a private KB. Permissions: Contents and Pull requests, read and write. |
 | `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to `https://github.com/` URLs. |
+| `language` | `en` | language of the agent's messages, pull requests and generated documents when the KB's `.meeting-agent.yml` does not set `language` (the KB's own setting wins) |
 
 ### `defaults`
 
@@ -65,9 +67,50 @@ defaults:
 | `contradiction_min_confidence` | `0.8` | minimum model confidence (0 to 1) to post a contradiction |
 | `context_min_interval_minutes` | `5` | minimum delay between two "related page" messages |
 | `stale_page_days` | `60` | a contradiction quoting a page verified longer ago than this mentions the page's age |
-| `auto_leave_empty_minutes` | `5` | reserved for live meetings |
-| `transcription_lag_alert_seconds` | `30` | reserved for live meetings |
-| `transcript_retention_days` | `30` | reserved for live meetings |
+| `auto_leave_empty_minutes` | `5` | the agent leaves when no human has been in the voice channel for this long |
+| `transcription_lag_alert_seconds` | `30` | post a message when the transcription falls this far behind |
+| `transcript_retention_days` | `30` | meeting folders (audio, transcripts, state, kept files) are deleted once they have not been updated for this long, including meetings abandoned after a crash |
+
+## Discord and transcription
+
+Needed only by `kb-meeting-agent run`.
+
+### `discord`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `token` | (required) | bot token |
+| `guild_id` | (required) | server the agent serves; slash commands are registered there |
+| `node` | `node` | Node.js 22.12+ executable |
+| `connector_dir` | `connector-discord/` of this checkout | where the connector lives |
+
+The connector only receives the Discord token, the guild id and the local connection details, never model keys or the GitHub token.
+
+### `transcription`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `language` | auto-detected | language passed to Whisper (`fr`, `en`…) |
+| `workers` | `2` | utterances transcribed at the same time |
+| `live` | (required) | engine used during the meeting |
+| `final` | none | engine for the second pass at the end; the minutes are written from it |
+| `hallucination_phrases` | `[]` | phrases removed from transcriptions, on top of the built-in list ("Sous-titres réalisés par la communauté d'Amara.org", "Thanks for watching"…); an utterance that is only "Merci." or "Thank you." is also dropped |
+| `min_utterance_seconds` | `0.4` | shorter utterances are dropped |
+| `max_no_speech_prob` | `0.6` | utterances the engine marks as probably not speech are dropped (mlx-whisper always reports 0, so it never fires there) |
+| `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
+| `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
+| `vocabulary_max_chars` | `600` | length of the vocabulary hint built from the KB glossary |
+
+Engine keys (`live`, `final`):
+
+| Key | Meaning |
+|---|---|
+| `provider` | `mlx-whisper` (macOS, Apple GPU, `--extra mlx`), `faster-whisper` (CPU or CUDA, `--extra faster`), `openai-compatible` (`/v1/audio/transcriptions`) or `fake` |
+| `model` | model name or Hugging Face repository |
+| `base_url`, `api_key` | `openai-compatible` only |
+| `device`, `compute_type`, `beam_size` | `faster-whisper` only (`auto`, `int8`, `1`) |
+
+Without a GitHub `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
 
 ## KB conventions (`.meeting-agent.yml`)
 
@@ -94,6 +137,7 @@ decisions:
   filename: '{number:04d}-{slug}.md'
   template: .meeting-agent/decision.md
   default_status: acceptée
+  scopes: [client, serveur, les deux, KB]
   index:
     file: decisions/README.md
     row: '| [{number:04d}]({filename}) | {title} | {status} |'
@@ -103,6 +147,9 @@ minutes:
   dir: minutes
   filename: '{date}-{slug}.md'
   template: .meeting-agent/minutes.md
+  index:
+    file: minutes/README.md
+    row: '| {date} | [{title}]({filename}) | {participants} |'
   branch: 'minutes/{date}-{slug}'
 ```
 
@@ -126,7 +173,8 @@ minutes:
 | `filename` | `{number:04d}-{slug}.md` | file name. With `{number}`, the agent takes the next free number, counting the KB as synced at the start of the meeting, files added by open pull requests and numbers already used in the meeting. A record merged during the meeting is not counted. |
 | `template` | built-in English template | file in the KB used as the record template |
 | `default_status` | `accepted` | value of `{status}` |
-| `index.file`, `index.row` | none | file the agent adds a row to, after the last table row of the file (code blocks ignored): keep the index as the file's last table |
+| `scopes` | `[]` (any) | allowed values of `{scope}`, written as is: use the KB's language. Two values may not differ only by case, accents or spacing. The model is told the list; a case, accent or spacing variant is written with the listed spelling, any other answer is asked again once, then the record is not published and the channel is told (the decision stays pending). Empty: the model picks a scope in the KB's vocabulary. |
+| `index.file`, `index.row` | none | file the agent adds a row to, after the last table row of the file (code blocks ignored): keep the index as the file's last table. Nothing is added if the file does not exist or has no table yet (a warning is logged): start the index with its header row. In the row, `|` is escaped and line breaks become spaces. |
 | `branch` | `decision/{date}-{slug}` | branch name; on GitHub, `-2` to `-9` is appended if it already exists. Dry runs and `unpublished/` reuse the name. |
 
 ### `minutes`
@@ -136,6 +184,7 @@ minutes:
 | `dir` | `meetings` | folder of minutes |
 | `filename` | `{date}-{slug}.md` | file name |
 | `template` | built-in English template | file in the KB used as the minutes template |
+| `index.file`, `index.row` | none | as for decisions: file the agent adds a row to in the minutes pull request, after the last table row of the file (code blocks ignored). Nothing is added if the file does not exist or has no table. |
 | `branch` | `meetings/{date}-{slug}` | branch name |
 
 ### Template placeholders
@@ -145,7 +194,8 @@ Templates are Markdown files. `{key}` and `{key:format}` (Python format, for exa
 | Template | Keys |
 |---|---|
 | decision record, decision `filename` and `branch` | `number` (numbered KBs only), `title`, `slug`, `status`, `date`, `scope`, `context`, `decision`, `consequences`, `sources` |
-| `index.row` | the same, plus `filename` and `path` |
+| decision `index.row` | the same, plus `filename` and `path` |
 | minutes, minutes `filename` and `branch` | `title`, `slug`, `date`, `participants`, `body` |
+| minutes `index.row` | `title`, `slug`, `date`, `participants`, `filename`, `path` |
 
 `date` is the meeting date (`YYYY-MM-DD`); `slug` is ASCII kebab-case. Keep model-written fields such as `title` out of `filename` and `branch`: use `slug`.

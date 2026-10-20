@@ -7,7 +7,7 @@ from kb_meeting_agent.agent.minutes import (
     build_minutes_change,
     write_minutes,
 )
-from kb_meeting_agent.conventions import MinutesConventions
+from kb_meeting_agent.conventions import IndexConfig, MinutesConventions
 from kb_meeting_agent.llm.fake import FakeProvider
 from kb_meeting_agent.models import Segment
 
@@ -69,3 +69,57 @@ def test_build_minutes_change():
         "reunions/2026-10-15-weekly-sync.md": "# Weekly sync\n\nAlice, Bob\n\n## Points\n\nText\n"
     }
     assert change.title == "Compte rendu : Weekly sync"
+
+
+def test_build_minutes_change_adds_an_index_row():
+    conventions = MinutesConventions(
+        dir="reunions",
+        index=IndexConfig(
+            file="reunions/README.md",
+            row="| {date} | [{title}]({filename}) | {participants} | `{path}` | {body} |",
+        ),
+    )
+    change = build_minutes_change(
+        conventions=conventions,
+        template="# {title}",
+        draft=MinutesDraft(title="Weekly sync", slug="weekly-sync", body="text"),
+        meeting_date=date(2026, 10, 15),
+        participants=["Alice", "Bob"],
+        language="fr",
+        index_content="# Réunions\n\n| Date | CR |\n|---|---|\n| 2026-10-08 | [A](a.md) |\n",
+    )
+    assert change.files["reunions/README.md"].endswith(
+        "| 2026-10-08 | [A](a.md) |\n"
+        "| 2026-10-15 | [Weekly sync](2026-10-15-weekly-sync.md) | Alice, Bob "
+        "| `reunions/2026-10-15-weekly-sync.md` | {body} |\n"
+    )
+    without_file = build_minutes_change(
+        conventions=conventions,
+        template="# {title}",
+        draft=MinutesDraft(title="Weekly sync", slug="weekly-sync", body="text"),
+        meeting_date=date(2026, 10, 15),
+        participants=["Alice"],
+        language="fr",
+        index_content=None,
+    )
+    assert list(without_file.files) == ["reunions/2026-10-15-weekly-sync.md"]
+
+
+async def test_write_minutes_mentions_gaps():
+    strong = FakeProvider(
+        {
+            "SliceSummary": [{"summary": "s"}],
+            "MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}],
+        }
+    )
+    await write_minutes(
+        strong,
+        segments=[seg(0, "Alice", "hello")],
+        decisions=[],
+        flags=[],
+        instructions="",
+        language="en",
+        gaps=[(300.0, 370.0)],
+    )
+    user = strong.calls_for("MinutesDraft")[0][2]
+    assert "TRANSCRIPTION GAPS:\n- 00:05:00 to 00:06:10" in user

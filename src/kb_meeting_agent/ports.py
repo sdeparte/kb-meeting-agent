@@ -8,9 +8,17 @@ from kb_meeting_agent.models import Chunk
 
 
 @dataclass(frozen=True)
+class Modal:
+    title: str
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
 class Button:
     id: str
     label: str
+    modal: Modal | None = None
 
 
 @dataclass(frozen=True)
@@ -24,6 +32,7 @@ class PrRef:
     number: int
     url: str
     branch: str
+    head: str = ""  # commit the agent put on the branch; empty when unknown
 
 
 class PublishError(Exception):
@@ -38,6 +47,13 @@ class PublishError(Exception):
         self.public = public
 
 
+class BranchChangedError(PublishError):
+    """The branch no longer points at the agent's commit: someone else pushed to it."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, public="the branch was changed by someone else")
+
+
 class OutputSink(Protocol):
     async def send(self, message: OutMessage) -> str: ...
 
@@ -46,6 +62,18 @@ class Publisher(Protocol):
     async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef: ...
 
     async def open_pr_paths(self, prefix: str) -> list[str]: ...
+
+    async def is_open(self, pr: PrRef) -> bool: ...
+
+    async def update_branch(
+        self, branch: str, files: dict[str, str], message: str, expected_head: str
+    ) -> str:
+        """Replace the branch with one commit on the current base; return the new head.
+
+        Leaves the branch alone when expected_head is already one commit on the current
+        base. Raises BranchChangedError when the branch head is not expected_head.
+        """
+        ...
 
 
 class KnowledgeBase(Protocol):
@@ -65,3 +93,7 @@ class KnowledgeBase(Protocol):
     def instructions(self) -> str: ...
 
     def template(self, kind: Literal["decision", "minutes"]) -> str: ...
+
+
+class SyncableKnowledgeBase(KnowledgeBase, Protocol):
+    async def sync(self) -> None: ...

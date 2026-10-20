@@ -1,6 +1,7 @@
 from conftest import KB_FILES, commit_file, make_kb_repo
 
 from kb_meeting_agent.config import KbConfig
+from kb_meeting_agent.kb import repo
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
 from kb_meeting_agent.llm.fake import FakeProvider
 
@@ -50,6 +51,21 @@ async def test_changing_embedding_model_rebuilds_the_index(tmp_path, kb_origin):
     second.close()
 
 
+async def test_language_falls_back_to_the_instance_setting(tmp_path, kb_origin):
+    commit_file(kb_origin, ".meeting-agent.yml", None)
+    config = KbConfig(repo="acme/kb", clone_url=str(kb_origin), language="fr")
+    knowledge_base = GitMarkdownKnowledgeBase(
+        "t", config, tmp_path / "d", FakeProvider().embed, "m"
+    )
+    assert knowledge_base.conventions.language == "fr"
+    await knowledge_base.sync()
+    assert knowledge_base.conventions.language == "fr"
+    commit_file(kb_origin, ".meeting-agent.yml", "language: de\n")
+    await knowledge_base.sync()
+    assert knowledge_base.conventions.language == "de"
+    knowledge_base.close()
+
+
 def test_token_is_scoped_to_github_and_kept_out_of_argv(tmp_path):
     config = KbConfig(repo="acme/kb", token="s3cret")
     knowledge_base = GitMarkdownKnowledgeBase(
@@ -80,3 +96,14 @@ async def test_sync_follows_a_changed_clone_url(tmp_path, kb_origin):
     await second.sync()
     assert (await second.search("Zeppelin", k=1))[0].path == "game/ideas.md"
     second.close()
+
+
+async def test_truncated_or_missing_instructions_are_logged(kb, kb_origin, monkeypatch, caplog):
+    monkeypatch.setattr(repo, "INSTRUCTIONS_MAX_CHARS", 20)
+    assert len(kb.instructions()) == 20
+    assert "cut at 20" in caplog.text
+    yml = KB_FILES[".meeting-agent.yml"].replace("[CONTRIBUTING.md]", "[CONTRIBUTING.md, gone.md]")
+    commit_file(kb_origin, ".meeting-agent.yml", yml)
+    await kb.sync()
+    kb.instructions()
+    assert "instruction files not found: gone.md" in caplog.text

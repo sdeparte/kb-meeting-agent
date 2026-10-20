@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import logging
 import os
 import subprocess
 from fnmatch import fnmatch
@@ -14,6 +15,8 @@ from kb_meeting_agent.conventions import KbConventions, load_conventions, load_t
 from kb_meeting_agent.kb.chunker import chunk_markdown
 from kb_meeting_agent.kb.index import Embedder, SearchIndex
 from kb_meeting_agent.models import Chunk
+
+log = logging.getLogger(__name__)
 
 INSTRUCTIONS_MAX_CHARS = 12000
 GLOSSARY_MAX_CHARS = 4000
@@ -37,7 +40,7 @@ class GitMarkdownKnowledgeBase:
         self.repo_dir = data_dir / "kb" / name / "repo"
         self._index = SearchIndex(data_dir / "kb" / name / "index.sqlite", embed)
         self._embedding_model = embedding_model
-        self._conventions = KbConventions()
+        self._conventions = self._with_language(KbConventions())
 
     @property
     def conventions(self) -> KbConventions:
@@ -48,8 +51,14 @@ class GitMarkdownKnowledgeBase:
 
     async def sync(self) -> None:
         await asyncio.to_thread(self._git_sync)
-        self._conventions = load_conventions(self.repo_dir)
+        self._conventions = self._with_language(load_conventions(self.repo_dir))
         await self._reindex()
+
+    def _with_language(self, conventions: KbConventions) -> KbConventions:
+        """The KB's own `language` wins; the instance's setting only fills in when it is absent."""
+        if "language" in conventions.model_fields_set or not self._config.language:
+            return conventions
+        return conventions.model_copy(update={"language": self._config.language})
 
     async def search(self, query: str, k: int = 8) -> list[Chunk]:
         return await self._index.search(query, k=k, boost_paths=self._conventions.authoritative)
@@ -72,12 +81,21 @@ class GitMarkdownKnowledgeBase:
         return self.read(path)[:GLOSSARY_MAX_CHARS] if path and self.exists(path) else ""
 
     def instructions(self) -> str:
-        parts = [
-            f"--- {path} ---\n{self.read(path)}"
-            for path in self._conventions.instructions
-            if self.exists(path)
-        ]
-        return "\n\n".join(parts)[:INSTRUCTIONS_MAX_CHARS]
+        """The instruction files, cut at INSTRUCTIONS_MAX_CHARS in total (a warning says so)."""
+        listed = self._conventions.instructions
+        if missing := [path for path in listed if not self.exists(path)]:
+            log.warning("%s: instruction files not found: %s", self.name, ", ".join(missing))
+        parts = [f"--- {path} ---\n{self.read(path)}" for path in listed if path not in missing]
+        text = "\n\n".join(parts)
+        if len(text) > INSTRUCTIONS_MAX_CHARS:
+            log.warning(
+                "%s: instructions are %d characters, cut at %d: the model does not see the end "
+                "(list a shorter file in .meeting-agent.yml)",
+                self.name,
+                len(text),
+                INSTRUCTIONS_MAX_CHARS,
+            )
+        return text[:INSTRUCTIONS_MAX_CHARS]
 
     def template(self, kind: Literal["decision", "minutes"]) -> str:
         section = self._conventions.decisions if kind == "decision" else self._conventions.minutes
