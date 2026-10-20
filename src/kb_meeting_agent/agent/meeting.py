@@ -32,7 +32,13 @@ from kb_meeting_agent.agent.prompting import format_segments
 from kb_meeting_agent.agent.transcript import Transcript
 from kb_meeting_agent.config import InterventionLevel
 from kb_meeting_agent.kb.quote import quote_exists
-from kb_meeting_agent.llm.base import LLMConfigError, LLMError, LLMProvider, LLMUnavailable
+from kb_meeting_agent.llm.base import (
+    LLMConfigError,
+    LLMError,
+    LLMInvalidOutput,
+    LLMProvider,
+    LLMUnavailable,
+)
 from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import (
     BranchChangedError,
@@ -336,14 +342,20 @@ class MeetingAgent:
         conventions = self.kb.conventions.decisions
         chunks = await self.kb.search(decision.statement, k=6)
         excerpt = format_segments(list(decision.excerpt))
-        draft = await draft_decision(
-            self.strong,
-            statement=decision.statement,
-            quote=excerpt,
-            chunks=chunks,
-            instructions=self.kb.instructions(),
-            language=self._lang,
-        )
+        try:
+            draft = await draft_decision(
+                self.strong,
+                statement=decision.statement,
+                quote=excerpt,
+                chunks=chunks,
+                instructions=self.kb.instructions(),
+                language=self._lang,
+                scopes=conventions.scopes,
+            )
+        except LLMInvalidOutput as exc:
+            log.warning("drafting the decision record failed: %s", exc)
+            await self._say(t(self._lang, "decision_draft_failed"))
+            return  # still pending: it can be validated again
         draft = draft.model_copy(
             update={"related_pages": [p for p in draft.related_pages if self.kb.exists(p.path)]}
         )
