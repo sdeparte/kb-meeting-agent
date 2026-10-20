@@ -45,6 +45,7 @@ class MinutesConventions(_Strict):
     dir: str = "meetings"
     filename: str = "{date}-{slug}.md"
     template: str | None = None
+    index: IndexConfig | None = None
     branch: str = "meetings/{date}-{slug}"
 
 
