@@ -508,13 +508,18 @@ class MeetingAgent:
             await self._say(t(self._lang, "minutes_failed", error=type(exc).__name__))
             return None
         participants = sorted({s.speaker_name for s in segments})
+        conventions = self.kb.conventions.minutes
+        index_file = conventions.index.file if conventions.index else None
         change = build_minutes_change(
-            conventions=self.kb.conventions.minutes,
+            conventions=conventions,
             template=self.kb.template("minutes"),
             draft=draft,
             meeting_date=self.settings.meeting_date,
             participants=participants,
             language=self._lang,
+            index_content=(
+                self.kb.read(index_file) if index_file and self.kb.exists(index_file) else None
+            ),
         )
         pr = await self._open_pr(change)
         if not isinstance(pr, PrRef):

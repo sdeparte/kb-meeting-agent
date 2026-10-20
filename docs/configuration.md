@@ -147,6 +147,9 @@ minutes:
   dir: minutes
   filename: '{date}-{slug}.md'
   template: .meeting-agent/minutes.md
+  index:
+    file: minutes/README.md
+    row: '| {date} | [{title}]({filename}) | {participants} |'
   branch: 'minutes/{date}-{slug}'
 ```
 
@@ -171,7 +174,7 @@ minutes:
 | `template` | built-in English template | file in the KB used as the record template |
 | `default_status` | `accepted` | value of `{status}` |
 | `scopes` | `[]` (any) | allowed values of `{scope}`. The model is told the list; a case, accent or spacing variant is written with the listed spelling, any other answer is asked again once, then the record is not published and the channel is told (the decision stays pending). Empty: the model picks a scope in the KB's vocabulary. |
-| `index.file`, `index.row` | none | file the agent adds a row to, after the last table row of the file (code blocks ignored): keep the index as the file's last table |
+| `index.file`, `index.row` | none | file the agent adds a row to, after the last table row of the file (code blocks ignored): keep the index as the file's last table. Nothing is added if the file does not exist. |
 | `branch` | `decision/{date}-{slug}` | branch name; on GitHub, `-2` to `-9` is appended if it already exists. Dry runs and `unpublished/` reuse the name. |
 
 ### `minutes`
@@ -181,6 +184,7 @@ minutes:
 | `dir` | `meetings` | folder of minutes |
 | `filename` | `{date}-{slug}.md` | file name |
 | `template` | built-in English template | file in the KB used as the minutes template |
+| `index.file`, `index.row` | none | as for decisions: file the agent adds a row to in the minutes pull request, after the last table row of the file (code blocks ignored). Nothing is added if the file does not exist. |
 | `branch` | `meetings/{date}-{slug}` | branch name |
 
 ### Template placeholders
@@ -190,7 +194,8 @@ Templates are Markdown files. `{key}` and `{key:format}` (Python format, for exa
 | Template | Keys |
 |---|---|
 | decision record, decision `filename` and `branch` | `number` (numbered KBs only), `title`, `slug`, `status`, `date`, `scope`, `context`, `decision`, `consequences`, `sources` |
-| `index.row` | the same, plus `filename` and `path` |
+| decision `index.row` | the same, plus `filename` and `path` |
 | minutes, minutes `filename` and `branch` | `title`, `slug`, `date`, `participants`, `body` |
+| minutes `index.row` | `title`, `slug`, `date`, `participants`, `filename`, `path` |
 
 `date` is the meeting date (`YYYY-MM-DD`); `slug` is ASCII kebab-case. Keep model-written fields such as `title` out of `filename` and `branch`: use `slug`.

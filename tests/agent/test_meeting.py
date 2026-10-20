@@ -242,6 +242,9 @@ async def test_end_publishes_minutes_with_decision_links(make_agent):
     branch, files, *_ = publisher.prs[-1]
     assert branch == "meetings/2026-10-15-weekly"
     assert "meetings/2026-10-15-weekly.md" in files
+    assert files["meetings/README.md"].endswith(
+        "|---|---|---|\n| 2026-10-15 | [Weekly](2026-10-15-weekly.md) | Alice |\n"
+    )
     assert "https://example.test/pull/1" in strong.calls_for("MinutesDraft")[0][2]
     assert pr.url == "https://example.test/pull/2"
     assert sink.texts()[-1] == "Meeting minutes: https://example.test/pull/2"
