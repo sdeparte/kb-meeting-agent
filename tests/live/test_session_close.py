@@ -1,6 +1,9 @@
 import asyncio
 import json
 
+from conftest import KB_FILES, commit_file
+
+from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE
 from kb_meeting_agent.llm.fake import FakeProvider
 from kb_meeting_agent.ports import PublishError
 from kb_meeting_agent.publish.local import FakePublisher
@@ -272,3 +275,39 @@ async def test_resume_does_not_reuse_utterances_recorded_after_the_last_save(mak
     await second.on_event("message", command("meeting_resume"))
     assert second.meeting.assembler.next_index == 1
 
+
+async def test_retry_publish_rebuilds_the_index_on_the_current_base(make_session, kb_origin):
+    failing, *_ = make_session(strong=FakeProvider(dict(MINUTES)), publisher=FailingPublisher())
+    await start(failing)
+    await speak(failing)
+    await failing.close()
+    merged = "| 2024-01-01 | [Kickoff](2024-01-01-kickoff.md) | Bob |"
+    commit_file(kb_origin, "meetings/README.md", KB_FILES["meetings/README.md"] + merged + "\n")
+    working, link, _, publisher = make_session()
+    await working.on_event("message", command("meeting_retry_publish"))
+    _, files, _, _ = publisher.prs[0]
+    index = files["meetings/README.md"].splitlines()
+    assert index[-2] == merged and "[Weekly]" in index[-1]
+    assert not any(path.endswith(INDEX_ROWS_FILE) for path in files)
+
+
+async def test_retry_publish_skips_a_decision_whose_number_is_now_taken(make_session, kb_origin):
+    decision = {"statement": "Cooldown is 30 seconds", "quote": "bonjour à tous"}
+    fast = FakeProvider({"Extraction": [{"claims": [], "decisions": [decision], "topics": []}]})
+    failing, *_ = make_session(fast=fast, publisher=FailingPublisher())
+    await start(failing)
+    await speak(failing, start=0, ms=31_000)
+    await failing.settle()
+    await failing.on_event(
+        "message",
+        {"type": "button", "custom_id": "decision:d1:validate", "user": {"id": "u1", "name": "A"}},
+    )
+    await failing.settle()
+    kept = failing.meeting.dir / "unpublished"
+    assert any(kept.rglob("0003-*.md"))
+    commit_file(kb_origin, "decisions/0003-other.md", "# 0003 — Other\n")
+    working, link, _, publisher = make_session()
+    await working.on_event("message", command("meeting_retry_publish"))
+    assert publisher.prs == []
+    assert "decision number 0003 is now used" in link.of("reply")[-1]["text"]
+    assert any(kept.rglob("PR.md"))

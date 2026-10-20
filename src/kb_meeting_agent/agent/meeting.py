@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections.abc import Awaitable, Sequence
@@ -10,6 +11,7 @@ from typing import Any, Literal
 
 from kb_meeting_agent.agent.answering import answer_question
 from kb_meeting_agent.agent.decisions import (
+    INDEX_ROWS_FILE,
     Change,
     DecisionDraft,
     build_decision_change,
@@ -471,6 +473,10 @@ class MeetingAgent:
                 await DryRunPublisher(kept).open_pr(
                     change.branch, change.files, change.title, change.body
                 )
+                if change.index_rows:
+                    (kept / change.branch / INDEX_ROWS_FILE).write_text(
+                        json.dumps(change.index_rows, ensure_ascii=False), encoding="utf-8"
+                    )
             except (PublishError, OSError):
                 log.exception("keeping %s (%s) locally failed", change.branch, change.title)
                 await self._say(t(self._lang, "publish_failed", error=shown))

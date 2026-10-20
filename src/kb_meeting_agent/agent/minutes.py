@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from itertools import groupby
 
-from kb_meeting_agent.agent.decisions import Change, index_files, slugify
+from kb_meeting_agent.agent.decisions import Change, added_rows, index_files, slugify
 from kb_meeting_agent.agent.factcheck import Flag
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_segments, format_timestamp
@@ -106,9 +106,8 @@ def build_minutes_change(
     path = f"{conventions.dir.rstrip('/')}/{filename}"
     files = {path: render_template(template, values).rstrip() + "\n"}
     row_values = {key: value for key, value in values.items() if key != "body"}
-    files |= index_files(
-        conventions.index, index_content, row_values | {"filename": filename, "path": path}
-    )
+    row_values |= {"filename": filename, "path": path}
+    files |= index_files(conventions.index, index_content, row_values)
     return Change(
         branch=render_template(conventions.branch, values),
         files=files,
@@ -119,4 +118,5 @@ def build_minutes_change(
             date=meeting_date.isoformat(),
             participants=", ".join(participants),
         ),
+        index_rows=added_rows(conventions.index, files, row_values),
     )
