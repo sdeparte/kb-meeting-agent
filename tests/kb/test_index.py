@@ -55,3 +55,13 @@ async def test_meta_and_clear(index):
     index.clear()
     assert index.file_hashes() == {}
     assert index.get_meta("key") == "v1"
+
+
+async def test_section_returns_every_chunk_of_a_section_in_page_order(index):
+    await index.upsert_file(
+        "a.md",
+        "h",
+        [chunk("a.md", "rows 1-7"), chunk("a.md", "rows 8-11"), chunk("a.md", "other", "I")],
+    )
+    assert [c.text for c in index.section("a.md", ("H",))] == ["rows 1-7", "rows 8-11"]
+    assert index.section("a.md", ("Missing",)) == []
