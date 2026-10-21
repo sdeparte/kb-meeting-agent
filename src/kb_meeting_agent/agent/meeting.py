@@ -63,7 +63,8 @@ LEVELS: tuple[InterventionLevel, ...] = ("silent", "contradictions", "context")
 
 @dataclass
 class AgentSettings:
-    agent_names: list[str]
+    agent_name: str = "agent"
+    agent_aliases: list[str] = field(default_factory=list)
     level: InterventionLevel = "contradictions"
     contradiction_min_confidence: float = 0.8
     context_min_interval_s: float = 300
@@ -72,6 +73,18 @@ class AgentSettings:
     window_s: float = 150
     summary_interval_s: float = 300
     meeting_date: date = field(default_factory=date.today)
+
+    @property
+    def agent_names(self) -> list[str]:
+        return [self.agent_name, *self.agent_aliases]
+
+
+@dataclass(frozen=True)
+class Interaction:
+    """One exchange with the agent, for the minutes: who asked it what, what it did."""
+
+    at: float  # seconds since the meeting started
+    text: str
 
 
 @dataclass
@@ -118,10 +131,19 @@ class MeetingAgent:
         self._last_context_at: float | None = None
         self._paused = False
         self._reported_errors: set[str] = set()
+        self.interactions: list[Interaction] = []
 
     @property
     def _lang(self) -> str:
         return self.kb.conventions.language
+
+    @property
+    def _label(self) -> str:
+        """The agent's name as participants and the minutes see it, e.g. "Breach (AI)"."""
+        return t(self._lang, "agent_label", name=self.settings.agent_name)
+
+    def _record(self, text: str) -> None:
+        self.interactions.append(Interaction(self._latest_end, text))
 
     async def _say(self, text: str, buttons: tuple[Button, ...] = ()) -> None:
         await self.sink.send(OutMessage(text=text, buttons=buttons))
@@ -217,6 +239,7 @@ class MeetingAgent:
         self.decisions[decision_id] = PendingDecision(
             decision_id, candidate.statement, matched or tuple(new), anchored=bool(matched)
         )
+        self._record(f"{self._label} proposed the decision “{candidate.statement}”")
         edit = Modal(
             title=t(self._lang, "edit_title"),
             label=t(self._lang, "edit_label"),
@@ -249,6 +272,11 @@ class MeetingAgent:
             return
         self._flagged_lines.add((flag.anchor, flag.quote))
         self.flags.append(flag)
+        self._record(
+            f"{self._label} pointed out that “{flag.statement}” "
+            f"{'was already rejected in' if flag.verdict == 'already_rejected' else 'contradicts'} "
+            f"the KB: “{_one_line(flag.quote)}” ({flag.anchor})"
+        )
         key = "already_rejected" if flag.verdict == "already_rejected" else "contradiction"
         text = t(self._lang, key, quote=flag.quote, anchor=flag.anchor, reason=flag.reason)
         if flag.stale_since:
@@ -262,6 +290,7 @@ class MeetingAgent:
         results = await self.kb.search(topic, k=1)
         if results:
             self._last_context_at = now
+            self._record(f"{self._label} pointed to the KB page {results[0].anchor}")
             await self._say(t(self._lang, "context", anchor=results[0].anchor))
 
     async def _handle_addressed(self, segment: Segment) -> None:
@@ -270,17 +299,19 @@ class MeetingAgent:
             self.fast, names=self.settings.agent_names, context=context, utterance=segment.text
         )
         if intent.kind == "question":
+            question = intent.question or segment.text
             text = await answer_question(
                 self.fast,
                 self.strong,
                 self.kb,
-                question=intent.question or segment.text,
+                question=question,
                 context=context,
                 language=self._lang,
             )
+            self._record_answer(segment.speaker_name, question, text)
             await self._say(text)
         elif intent.kind == "set_level" and intent.level in LEVELS:
-            await self.set_level(intent.level)
+            await self.set_level(intent.level, user=segment.speaker_name)
         elif intent.kind in ("validate", "ignore"):
             pending = [d for d in self.decisions.values() if d.state == "pending"]
             if pending and intent.kind == "validate":
@@ -302,17 +333,20 @@ class MeetingAgent:
         if len(parts) == 3 and parts[0] == "decision" and parts[2] == "edit" and value.strip():
             await self.edit_decision(parts[1], value.strip(), user)
 
-    async def set_level(self, level: InterventionLevel, announce: bool = True) -> None:
+    async def set_level(
+        self, level: InterventionLevel, announce: bool = True, user: str | None = None
+    ) -> None:
         if level not in LEVELS:
             return
         self.level = level
+        self._record(f"{user or 'Someone'} set {self._label} to the {level} level")
         if announce:
             await self._say(t(self._lang, "level_changed", level=level))
 
-    async def ask(self, question: str) -> str:
+    async def ask(self, question: str, user: str | None = None) -> str:
         context = format_segments(self.transcript.window(self.settings.window_s))
         try:
-            return await answer_question(
+            text = await answer_question(
                 self.fast,
                 self.strong,
                 self.kb,
@@ -323,10 +357,18 @@ class MeetingAgent:
         except LLMError as exc:
             log.warning("answering failed: %s", exc)
             return t(self._lang, "checks_paused")
+        self._record_answer(user or "Someone", question, text)
+        return text
+
+    def _record_answer(self, user: str, question: str, answer: str) -> None:
+        self._record(
+            f"{user} asked {self._label}: “{_one_line(question)}”; answer: “{_one_line(answer)}”"
+        )
 
     async def edit_decision(self, decision_id: str, statement: str, user: str) -> None:
         decision = self.decisions.get(decision_id)
         if decision and decision.state == "pending":
+            self._record(f"{user} reworded the decision as “{statement}”")
             decision.statement = statement
             await self.validate_decision(decision_id, user)
 
@@ -339,6 +381,7 @@ class MeetingAgent:
         decision = self.decisions.get(decision_id)
         if decision and decision.state == "pending":
             decision.state = "ignored"
+            self._record(f"{user} dismissed the decision “{decision.statement}”")
             await self._say(t(self._lang, "decision_ignored", user=user))
 
     async def _validate(self, decision: PendingDecision, user: str) -> None:
@@ -378,12 +421,17 @@ class MeetingAgent:
         pr = await self._open_pr(change)
         if isinstance(pr, Path):
             decision.state = "kept"
+            self._record(
+                f"{user} validated the decision “{decision.statement}” "
+                "(publication failed, kept locally)"
+            )
             return
         if pr is None:
             return
         if number is not None:
             self._reserved_numbers.add(number)
         decision.state, decision.pr = "validated", pr
+        self._record(f"{user} validated the decision “{decision.statement}” ({pr.url})")
         decision.publication = {
             "draft": draft.model_dump(),
             "number": number,
@@ -508,6 +556,8 @@ class MeetingAgent:
                 instructions=self.kb.instructions(),
                 language=self._lang,
                 gaps=list(gaps),
+                agent_label=self._label,
+                interactions=[(i.at, i.text) for i in self.interactions],
             )
         except LLMError as exc:
             log.exception("writing the minutes failed; transcript at %s", self.transcript.path)
@@ -543,6 +593,7 @@ class MeetingAgent:
             "flagged_subjects": sorted(self._flagged_subjects),
             "flagged_lines": [list(line) for line in sorted(self._flagged_lines)],
             "flags": [asdict(flag) for flag in self.flags],
+            "interactions": [asdict(i) for i in self.interactions],
             "decisions": [
                 {
                     "id": d.id,
@@ -569,6 +620,7 @@ class MeetingAgent:
         self._flagged_subjects = set(state["flagged_subjects"])
         self._flagged_lines = {tuple(line) for line in state["flagged_lines"]}
         self.flags = [Flag(**flag) for flag in state["flags"]]
+        self.interactions = [Interaction(**i) for i in state.get("interactions", [])]
         self.decisions = {
             d["id"]: PendingDecision(
                 id=d["id"],
@@ -600,3 +652,8 @@ def _similar(a: str, b: str) -> bool:
     if not left or not right:
         return False
     return len(left & right) / min(len(left), len(right)) >= 0.5
+
+
+def _one_line(text: str, limit: int = 300) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"

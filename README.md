@@ -138,7 +138,7 @@ One JSON object per line, times in seconds from the start of the meeting:
 {"speaker_id": "1", "speaker_name": "Alice", "start": 15.0, "end": 24.0, "text": "Scribe, what does the KB say about the cooldown?"}
 ```
 
-The agent answers when one of `agent_names` appears in a segment (`scribe` in the example configuration).
+The agent answers when its `agent.name`, or one of its `agent.aliases`, appears in a segment (`Scribe` in the example configuration).
 
 ## Add the agent to a Discord server
 
@@ -188,7 +188,7 @@ The agent registers its slash commands on the server, starts the connector and r
 | `/meeting resume` | resumes a meeting interrupted by a crash |
 | `/meeting retry-publish` | publishes pull requests kept after a failed publication |
 
-Participants can also address the agent by voice ("scribe, …"). The agent leaves when nobody is left in the channel for `auto_leave_empty_minutes`.
+Participants can also address the agent by voice, by its `agent.name` ("Scribe, …"). Every exchange with it (questions and answers, contradictions it pointed out, decisions it proposed and who validated them) is woven into the minutes, which name it "Scribe (AI)". The agent leaves when nobody is left in the channel for `auto_leave_empty_minutes`.
 
 **Audio and privacy.** Audio is kept on the agent's machine until the minutes are published (for the second transcription pass), then deleted. `/meeting optout` deletes your recorded audio at once; what you said before stays in the transcript. Meeting folders are deleted after `transcript_retention_days`. The full transcript is never published. Everyone in the channel sees the recording notice when the meeting starts.
 

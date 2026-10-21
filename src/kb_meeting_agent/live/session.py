@@ -346,10 +346,12 @@ class MeetingSession:
                 elif kind == "modal":
                     await m.agent.on_modal(item[1], item[2], item[3])
                 elif kind == "level":
-                    await m.agent.set_level(item[1], announce=False)
+                    await m.agent.set_level(item[1], announce=False, user=item[2])
                 elif kind == "ask":
                     await self.deps.link.send(
-                        "reply", interaction_id=item[2], text=await m.agent.ask(item[1])
+                        "reply",
+                        interaction_id=item[2],
+                        text=await m.agent.ask(item[1], user=item[3]),
                     )
             except Exception:
                 log.exception("meeting step %s failed", item[0])
@@ -421,7 +423,10 @@ class MeetingSession:
         if level := msg["options"].get("level"):
             await m.agent.set_level(level, announce=False)
         await self._join(m)
-        await m.sink.send(OutMessage(t(m.lang, "recording_notice", repo=kb_config.repo)))
+        notice = t(
+            m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
+        )
+        await m.sink.send(OutMessage(notice))
         await self._reply(msg, t(m.lang, "meeting_started", kb=kb_name))
         self._save_state()
 
@@ -453,7 +458,7 @@ class MeetingSession:
         if (m := await self._open_meeting(msg)) is None:
             return
         level = msg["options"].get("level")
-        await m.queue.put(("level", level))
+        await m.queue.put(("level", level, msg["user"]["name"]))
         await self._reply(msg, t(self._lang(), "level_changed", level=level))
 
     async def _optout(self, msg: dict[str, Any]) -> None:
@@ -473,7 +478,9 @@ class MeetingSession:
     async def _ask(self, msg: dict[str, Any]) -> None:
         if (m := await self._open_meeting(msg)) is None:
             return
-        await m.queue.put(("ask", msg["options"].get("question", ""), msg["interaction_id"]))
+        await m.queue.put(
+            ("ask", msg["options"].get("question", ""), msg["interaction_id"], msg["user"]["name"])
+        )
 
     def _purge_expired(self) -> None:
         """Delete meeting folders (audio, transcripts, state, kept files) past retention.
@@ -643,7 +650,8 @@ class MeetingSession:
             sink=sink,
             transcript=Transcript(directory / "transcript.jsonl"),
             settings=AgentSettings(
-                agent_names=self.deps.config.agent_names,
+                agent_name=self.deps.config.agent.name,
+                agent_aliases=self.deps.config.agent.aliases,
                 level=defaults.intervention_level,
                 contradiction_min_confidence=defaults.contradiction_min_confidence,
                 context_min_interval_s=defaults.context_min_interval_minutes * 60,
@@ -651,7 +659,11 @@ class MeetingSession:
                 meeting_date=meeting_date,
             ),
         )
-        prompt = vocabulary_prompt(kb.glossary(), self._transcription.vocabulary_max_chars)
+        # The agent's own names first, so that Whisper spells them right when people call it.
+        names = ", ".join(self.deps.config.agent.names)
+        room = max(0, self._transcription.vocabulary_max_chars - len(names) - 2)
+        terms = vocabulary_prompt(kb.glossary(), room)
+        prompt = f"{names}, {terms}" if terms else names
         pipeline = TranscriptionPipeline(
             self.deps.live_transcriber,
             language=self._transcription.language,
