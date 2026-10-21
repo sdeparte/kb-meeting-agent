@@ -245,3 +245,10 @@ async def test_the_notice_and_the_whisper_hint_carry_the_agent_name(make_session
     await speak(session)
     await session.settle()
     assert live.calls[0][2].startswith("Scribe")
+
+
+async def test_the_level_chosen_at_start_is_recorded_with_who_chose_it(make_session):
+    session, *_ = make_session()
+    await start(session, level="silent")
+    [interaction] = session.meeting.agent.interactions
+    assert interaction.text == "Alice set Scribe (AI) to the silent level"

@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 
 class ConfigError(Exception):
@@ -113,9 +113,13 @@ class TranscriptionConfig(_Strict):
     vocabulary_max_chars: int = Field(600, ge=0)
 
 
+# An empty name would match between any punctuation and a space: every segment would address it.
+_AgentName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
 class AgentIdentity(_Strict):
-    name: str = "agent"  # how the agent introduces itself and appears in the minutes
-    aliases: list[str] = Field(default_factory=list)  # other ways to address it
+    name: _AgentName = "agent"  # how the agent introduces itself and appears in the minutes
+    aliases: list[_AgentName] = Field(default_factory=list)  # other ways to address it
 
     @property
     def names(self) -> list[str]:

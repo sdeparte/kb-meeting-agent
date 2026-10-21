@@ -368,7 +368,7 @@ class MeetingAgent:
     async def edit_decision(self, decision_id: str, statement: str, user: str) -> None:
         decision = self.decisions.get(decision_id)
         if decision and decision.state == "pending":
-            self._record(f"{user} reworded the decision as “{statement}”")
+            self._record(f"{user} reworded the decision “{decision.statement}” as “{statement}”")
             decision.statement = statement
             await self.validate_decision(decision_id, user)
 

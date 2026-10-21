@@ -604,6 +604,18 @@ async def test_contradictions_and_decisions_are_recorded(make_agent):
     assert "Carol dismissed the decision “Drop BLE”" in recorded
 
 
+async def test_a_reworded_decision_keeps_its_first_wording(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, *_ = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_modal("decision:d1:edit", "Cooldown is 45 seconds", "Bob")
+    assert (
+        "Bob reworded the decision “Cooldown is 30 seconds” as “Cooldown is 45 seconds”"
+        in lines(agent)
+    )
+
+
 async def test_the_minutes_receive_the_interactions(make_agent):
     strong = FakeProvider({"MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}]})
     agent, _, strong, *_ = make_agent(strong=strong, extraction_interval_s=1000)

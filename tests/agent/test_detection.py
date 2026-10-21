@@ -84,3 +84,9 @@ async def test_classify_addressed_names_the_agent():
     llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
     await classify_addressed(llm, names=["Breach", "brèche"], context="", utterance="Breach ?")
     assert "You are Breach" in llm.calls[0][1] and "brèche" in llm.calls[0][1]
+
+
+async def test_classify_addressed_without_aliases_names_the_agent_once():
+    llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
+    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?")
+    assert "may also call you" not in llm.calls[0][1]
