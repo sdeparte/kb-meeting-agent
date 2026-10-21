@@ -119,6 +119,7 @@ class MeetingAgent:
         self.transcript = transcript
         self.settings = settings
         self.level: InterventionLevel = settings.level
+        self.previous_level: InterventionLevel = settings.level  # what "as before" goes back to
         self.decisions: dict[str, PendingDecision] = {}
         self.flags: list[Flag] = []
         self._flagged_subjects: set[str] = set()
@@ -321,6 +322,9 @@ class MeetingAgent:
             names=self.settings.agent_names,
             context=context,
             utterance=segment.text,
+            level=self.level,
+            previous_level=self.previous_level,
+            default_level=self.settings.level,
             language=self._lang,
         )
         if intent.kind == "question":
@@ -364,6 +368,8 @@ class MeetingAgent:
     ) -> None:
         if level not in LEVELS:
             return
+        if level != self.level:
+            self.previous_level = self.level
         self.level = level
         self._record("level", user=user or t(self._lang, "someone"), level=level)
         if announce:
@@ -608,6 +614,7 @@ class MeetingAgent:
     def snapshot(self) -> dict[str, Any]:
         return {
             "level": self.level,
+            "previous_level": self.previous_level,
             "summary": self._summary,
             "extracted": self._extracted,
             "latest_end": self._latest_end,
@@ -635,6 +642,7 @@ class MeetingAgent:
 
     def restore(self, state: dict[str, Any]) -> None:
         self.level = state["level"]
+        self.previous_level = state.get("previous_level", self.level)
         self._summary = state["summary"]
         self._extracted = state["extracted"]
         self._latest_end = state["latest_end"]
