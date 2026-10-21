@@ -115,6 +115,18 @@ class SearchIndex:
         top = sorted(scores, key=lambda chunk_id: scores[chunk_id], reverse=True)[:k]
         return [rows[chunk_id] for chunk_id in top]
 
+    def section(self, path: str, headings: tuple[str, ...]) -> list[Chunk]:
+        """Every chunk of a section, in page order."""
+        ids = [
+            row[0]
+            for row in self._db.execute(
+                "SELECT id FROM chunks WHERE path = ? AND headings = ? ORDER BY id",
+                (path, json.dumps(list(headings), ensure_ascii=False)),
+            )
+        ]
+        rows = self._rows(ids) if ids else {}
+        return [rows[chunk_id] for chunk_id in ids]
+
     def _lexical(self, query: str, limit: int) -> list[int]:
         terms = re.findall(r"\w+", query)
         if not terms:

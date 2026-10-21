@@ -8,6 +8,7 @@ from kb_meeting_agent.ports import KnowledgeBase
 
 MAX_QUERIES = 3
 MAX_CHUNKS = 10
+SECTION_MAX_CHARS = 6000
 
 
 class Queries(Schema):
@@ -55,7 +56,7 @@ async def answer_question(
             if key not in seen:
                 seen.add(key)
                 chunks.append(chunk)
-    chunks = chunks[:MAX_CHUNKS]
+    chunks = _with_sections(kb, chunks[:MAX_CHUNKS])
     if not chunks:
         return t(language, "not_covered")
     answer = await complete(
@@ -74,3 +75,20 @@ async def answer_question(
         answer=answer.answer,
         sources=", ".join(f"`{source}`" for source in sources) or "—",
     )
+
+
+def _with_sections(kb: KnowledgeBase, chunks: list[Chunk]) -> list[Chunk]:
+    """Each chunk with the other chunks of its section, when the section was split: a table
+    cut in parts is then read whole, where a question listing its rows would see only some."""
+    result: list[Chunk] = []
+    seen: set[tuple[str, str]] = set()
+    for chunk in chunks:
+        pieces = kb.section(chunk)
+        if chunk not in pieces or sum(len(piece.text) for piece in pieces) > SECTION_MAX_CHARS:
+            pieces = [chunk]
+        for piece in pieces:
+            key = (piece.anchor, piece.text)
+            if key not in seen:
+                seen.add(key)
+                result.append(piece)
+    return result
