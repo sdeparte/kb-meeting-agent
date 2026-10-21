@@ -64,3 +64,29 @@ async def test_update_summary():
     assert await update_summary(llm, summary="", new="x", language="en") == (
         "We talked about cooldown."
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Brèche, qu'en dit la KB ?", True),
+        ("breche, valide", True),
+        ("BREACH, mode silencieux", True),
+        ("on a une brèche dans le mur", True),  # the name is a word: whole-word match only
+        ("embrèchement", False),
+    ],
+)
+def test_is_addressed_ignores_accents_and_case(text, expected):
+    assert is_addressed(text, ["Breach", "brèche"]) is expected
+
+
+async def test_classify_addressed_names_the_agent():
+    llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
+    await classify_addressed(llm, names=["Breach", "brèche"], context="", utterance="Breach ?")
+    assert "You are Breach" in llm.calls[0][1] and "brèche" in llm.calls[0][1]
+
+
+async def test_classify_addressed_without_aliases_names_the_agent_once():
+    llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
+    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?")
+    assert "may also call you" not in llm.calls[0][1]

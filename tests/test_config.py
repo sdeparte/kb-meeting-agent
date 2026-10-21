@@ -6,7 +6,9 @@ from pydantic import ValidationError
 from kb_meeting_agent.config import ConfigError, load_config
 
 CONFIG = """
-agent_names: [scribe]
+agent:
+  name: Breach
+  aliases: [brèche]
 data_dir: {data_dir}
 llm:
   fast: {{provider: openai-compatible, base_url: "http://localhost:11434/v1", model: qwen3:14b}}
@@ -35,7 +37,8 @@ def test_load_config_substitutes_env_and_applies_defaults(tmp_path, monkeypatch)
     assert cfg.knowledge_bases["demo"].base_branch == "main"
     assert cfg.defaults.intervention_level == "contradictions"
     assert cfg.defaults.contradiction_min_confidence == 0.8
-    assert cfg.agent_names == ["scribe"]
+    assert cfg.agent.name == "Breach"
+    assert cfg.agent.names == ["Breach", "brèche"]
 
 
 def test_missing_env_var_raises(tmp_path, monkeypatch):
@@ -107,6 +110,38 @@ def test_unknown_transcriber_is_rejected(tmp_path, monkeypatch):
         monkeypatch.setenv(name, "x")
     text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
         "provider: mlx-whisper", "provider: vosk"
+    )
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, text))
+
+
+def test_agent_names_is_no_longer_accepted(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    text = CONFIG.format(data_dir=tmp_path).replace(
+        "agent:\n  name: Breach\n  aliases: [brèche]\n", "agent_names: [scribe]\n"
+    )
+    with pytest.raises(ValidationError, match="agent_names"):
+        load_config(write(tmp_path, text))
+
+
+def test_agent_defaults(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    text = CONFIG.format(data_dir=tmp_path).replace(
+        "agent:\n  name: Breach\n  aliases: [brèche]\n", ""
+    )
+    assert load_config(write(tmp_path, text)).agent.names == ["agent"]
+
+
+@pytest.mark.parametrize(
+    "agent", ["agent:\n  name: ''\n", "agent:\n  name: Otis\n  aliases: ['  ']\n"]
+)
+def test_an_empty_agent_name_is_rejected(tmp_path, monkeypatch, agent):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    text = CONFIG.format(data_dir=tmp_path).replace(
+        "agent:\n  name: Breach\n  aliases: [brèche]\n", agent
     )
     with pytest.raises(ValidationError):
         load_config(write(tmp_path, text))

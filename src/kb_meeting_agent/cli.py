@@ -93,7 +93,8 @@ async def _replay(args: argparse.Namespace) -> int:
         sink=ConsoleSink(),
         transcript=Transcript(transcript_path),
         settings=AgentSettings(
-            agent_names=config.agent_names,
+            agent_name=config.agent.name,
+            agent_aliases=config.agent.aliases,
             level=args.level or config.defaults.intervention_level,
             contradiction_min_confidence=config.defaults.contradiction_min_confidence,
             context_min_interval_s=config.defaults.context_min_interval_minutes * 60,
