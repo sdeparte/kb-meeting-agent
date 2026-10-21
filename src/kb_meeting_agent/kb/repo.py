@@ -63,6 +63,9 @@ class GitMarkdownKnowledgeBase:
     async def search(self, query: str, k: int = 8) -> list[Chunk]:
         return await self._index.search(query, k=k, boost_paths=self._conventions.authoritative)
 
+    def section(self, chunk: Chunk) -> list[Chunk]:
+        return self._index.section(chunk.path, chunk.headings, chunk.text)
+
     def read(self, path: str) -> str:
         return self._resolve(path).read_text(encoding="utf-8")
 
