@@ -5,8 +5,9 @@ agent:
 data_dir: ~/.local/share/kb-meeting-agent
 
 llm:
-  # Everything local (Ollama on a Mac mini):
-  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b" }
+  # Everything local (Ollama on a Mac mini). Temperature 0: the same question gets the same
+  # answer (Ollama samples at 0.8 otherwise). max_tokens stops a model repeating itself.
+  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none", temperature: 0, max_tokens: 8192 } }
   embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
   # Or Claude for the heavy steps:
   strong:    { provider: anthropic, model: claude-opus-5-5, api_key: "${ANTHROPIC_API_KEY}", effort: high, refusal_fallback: true }
