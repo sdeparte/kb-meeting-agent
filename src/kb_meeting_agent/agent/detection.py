@@ -51,7 +51,7 @@ Read the CONTEXT to understand the conversation, but extract items from the NEW 
 - topics: at most 3 short names of subjects discussed in the NEW part.
 Return empty lists when nothing qualifies. Write `subject`, `statement` and `topics` in language "{language}"."""
 
-ADDRESSED_SYSTEM = """You are {name}, the AI assistant of this meeting; participants may also call you {aliases}. A participant just addressed you.
+ADDRESSED_SYSTEM = """You are {name}, the AI assistant of this meeting{aliases}. A participant just addressed you.
 Classify the request:
 - question: asks for information that may be in the knowledge base; put a self-contained version of the question in `question`.
 - set_level: asks you to change how often you intervene; put silent, contradictions or context in `level`.
@@ -68,7 +68,8 @@ async def classify_addressed(
     llm: LLMProvider, *, names: list[str], context: str, utterance: str
 ) -> AddressedIntent:
     user = f"RECENT TRANSCRIPT:\n{context}\n\nUTTERANCE ADDRESSED TO YOU:\n{utterance}"
-    system = ADDRESSED_SYSTEM.format(name=names[0], aliases=", ".join(names[1:]) or names[0])
+    aliases = f"; participants may also call you {', '.join(names[1:])}" if names[1:] else ""
+    system = ADDRESSED_SYSTEM.format(name=names[0], aliases=aliases)
     return await complete(llm, system, user, AddressedIntent)
 
 

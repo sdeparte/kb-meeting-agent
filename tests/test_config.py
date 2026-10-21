@@ -132,3 +132,16 @@ def test_agent_defaults(tmp_path, monkeypatch):
         "agent:\n  name: Breach\n  aliases: [brèche]\n", ""
     )
     assert load_config(write(tmp_path, text)).agent.names == ["agent"]
+
+
+@pytest.mark.parametrize(
+    "agent", ["agent:\n  name: ''\n", "agent:\n  name: Otis\n  aliases: ['  ']\n"]
+)
+def test_an_empty_agent_name_is_rejected(tmp_path, monkeypatch, agent):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    text = CONFIG.format(data_dir=tmp_path).replace(
+        "agent:\n  name: Breach\n  aliases: [brèche]\n", agent
+    )
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, text))

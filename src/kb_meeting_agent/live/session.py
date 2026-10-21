@@ -421,7 +421,7 @@ class MeetingSession:
             meeting_date=self.deps.today(),
         )
         if level := msg["options"].get("level"):
-            await m.agent.set_level(level, announce=False)
+            await m.agent.set_level(level, announce=False, user=msg["user"]["name"])
         await self._join(m)
         notice = t(
             m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
