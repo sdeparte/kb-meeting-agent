@@ -102,7 +102,7 @@ The connector only receives the Discord token, the guild id and the local connec
 | `max_no_speech_prob` | `0.6` | utterances the engine marks as probably not speech are dropped (mlx-whisper always reports 0, so it never fires there) |
 | `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
 | `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
-| `vocabulary` | `[]` | terms hinted to Whisper before the glossary, e.g. `[KB]` so that "la KB" is not heard as "l'AKB" |
+| `vocabulary` | `[]` | terms hinted to Whisper before the glossary, e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
 | `vocabulary_max_chars` | `600` | length of the vocabulary hint: the agent's `agent.name` (not its aliases), then `vocabulary`, then the terms of the KB glossary's tables (first cells, then `code` spans), leaving out status tags, commit hashes and, among the `code` spans, code identifiers |
 
 Engine keys (`live`, `final`):
