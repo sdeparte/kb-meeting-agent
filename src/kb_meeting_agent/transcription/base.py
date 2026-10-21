@@ -128,13 +128,13 @@ DEFAULT_HALLUCINATIONS = (
 )
 
 
-# What Whisper writes for noise or breath; dropped only when it is the whole utterance.
 def compression_ratio(text: str) -> float:
     """Whisper's own loop detector: a text repeating itself compresses far better than speech."""
     data = text.encode("utf-8")
     return len(data) / len(zlib.compress(data)) if data else 0.0
 
 
+# What Whisper writes for noise or breath; dropped only when it is the whole utterance.
 LONE_HALLUCINATIONS = ("merci", "merci beaucoup", "thank you", "thank you very much")
 
 
