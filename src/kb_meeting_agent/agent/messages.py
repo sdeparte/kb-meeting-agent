@@ -18,6 +18,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "level_changed": "Intervention level: {level}.",
         "checks_paused": "Checks paused: the model is unavailable. Transcription continues.",
         "checks_resumed": "Checks resumed.",
+        "agent_label": "{name} (AI)",
         "meeting_resumed": "Meeting resumed.",
         "nothing_to_resume": "There is no unfinished meeting to resume.",
         "retry_publish_done": "Published {count} kept pull request(s): {urls}",
@@ -31,10 +32,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "the agent's machine; details are in its log."
         ),
         "recording_notice": (
-            "This meeting is transcribed by an AI agent. Audio stays on the agent's machine "
-            "until the minutes are published, then it is deleted. The minutes and the validated "
-            "decisions will be proposed as pull requests in {repo}. Use /meeting optout to stop "
-            "transcribing your voice."
+            "This meeting is transcribed by {name}, an AI agent. Say “{name}, …” to ask it a "
+            "question. Audio stays on the agent's machine until the minutes are published, then "
+            "it is deleted. The minutes and the validated decisions will be proposed as pull "
+            "requests in {repo}. Use /meeting optout to stop transcribing your voice."
         ),
         "meeting_started": "Meeting started with the {kb} knowledge base.",
         "meeting_already_running": "A meeting is already running.",
@@ -108,6 +109,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "Vérifications en pause : le modèle est indisponible. La transcription continue."
         ),
         "checks_resumed": "Vérifications reprises.",
+        "agent_label": "{name} (IA)",
         "meeting_resumed": "Réunion reprise.",
         "nothing_to_resume": "Aucune réunion inachevée à reprendre.",
         "retry_publish_done": "{count} pull request(s) conservée(s) publiée(s) : {urls}",
@@ -121,10 +123,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "transcription est conservée sur la machine de l'agent ; le détail est dans son journal."
         ),
         "recording_notice": (
-            "Cette réunion est transcrite par un agent IA. L'audio reste sur la machine de "
-            "l'agent jusqu'à la publication du compte rendu, puis il est supprimé. Le compte "
-            "rendu et les décisions validées seront proposés en pull request dans {repo}. "
-            "Utilisez /meeting optout pour ne plus être transcrit."
+            "Cette réunion est transcrite par {name}, un agent IA. Dites « {name}, … » pour lui "
+            "poser une question. L'audio reste sur la machine de l'agent jusqu'à la publication "
+            "du compte rendu, puis il est supprimé. Le compte rendu et les décisions validées "
+            "seront proposés en pull request dans {repo}. Utilisez /meeting optout pour ne plus "
+            "être transcrit."
         ),
         "meeting_started": "Réunion démarrée avec la base de connaissances {kb}.",
         "meeting_already_running": "Une réunion est déjà en cours.",

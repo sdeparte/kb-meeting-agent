@@ -113,8 +113,17 @@ class TranscriptionConfig(_Strict):
     vocabulary_max_chars: int = Field(600, ge=0)
 
 
+class AgentIdentity(_Strict):
+    name: str = "agent"  # how the agent introduces itself and appears in the minutes
+    aliases: list[str] = Field(default_factory=list)  # other ways to address it
+
+    @property
+    def names(self) -> list[str]:
+        return [self.name, *self.aliases]
+
+
 class AppConfig(_Strict):
-    agent_names: list[str] = Field(default_factory=lambda: ["agent"])
+    agent: AgentIdentity = Field(default_factory=AgentIdentity)
     data_dir: Path = Path("~/.local/share/kb-meeting-agent")
     llm: LLMConfig
     knowledge_bases: dict[str, KbConfig]

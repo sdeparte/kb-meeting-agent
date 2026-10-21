@@ -14,7 +14,7 @@ def make_session(tmp_path, kb_origin):
     def factory(*, fast=None, strong=None, live=None, final=None, publisher=None, **defaults):
         config = AppConfig.model_validate(
             {
-                "agent_names": ["scribe"],
+                "agent": {"name": "Scribe"},
                 "data_dir": str(tmp_path / "data"),
                 "llm": {
                     role: {"provider": "fake", "model": "fake"}

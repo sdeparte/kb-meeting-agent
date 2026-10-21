@@ -10,7 +10,9 @@ Two files configure the agent:
 Values written as `${VAR}` are replaced by the environment variable `VAR`; the agent refuses to start if it is not set. Unknown keys are rejected.
 
 ```yaml
-agent_names: [scribe]
+agent:
+  name: Scribe
+  aliases: []
 data_dir: ~/.local/share/kb-meeting-agent
 
 llm:
@@ -32,7 +34,8 @@ defaults:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `agent_names` | `[agent]` | words that make a segment a request to the agent (whole words, case-insensitive). Prefer a word nobody says by accident. |
+| `agent.name` | `agent` | the agent's name. A segment containing it (whole word, ignoring case and accents) is a request to the agent. The agent introduces itself with it in the recording notice, the minutes name it "<name> (AI)" ("(IA)" in French), and it is given to Whisper as a vocabulary hint. Prefer a word nobody says by accident. |
+| `agent.aliases` | `[]` | other words that address the agent, e.g. a variant spelling or how Whisper tends to transcribe the name |
 | `data_dir` | `~/.local/share/kb-meeting-agent` | where KB clones and search indexes are kept (`kb/<name>/repo`, `kb/<name>/index.sqlite`) |
 
 ### `llm.fast`, `llm.strong`, `llm.embedding`
