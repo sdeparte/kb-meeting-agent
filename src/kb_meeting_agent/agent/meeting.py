@@ -158,6 +158,9 @@ class MeetingAgent:
         previous, self._thread = self._thread, ref
         try:
             yield
+        except LLMError:
+            await self._say(t(self._lang, "announce_failed"))  # never leave it unanswered
+            raise  # _guard still pauses the checks if the model is down
         finally:
             self._thread = previous
 

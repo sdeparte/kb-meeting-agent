@@ -15,6 +15,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "✍️ {user} validated “{statement}”: drafting the decision record and opening "
             "the pull request…"
         ),
+        "announce_failed": (
+            "Interrupted: the model did not answer (the agent's log has the details). "
+            "Try again in a moment."
+        ),
         "decision_ignored": "Decision ignored by {user}.",
         "decision_draft_failed": (
             "Could not write the decision record: the model did not give a usable answer (the "
@@ -107,6 +111,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "announce_validating": (
             "✍️ {user} a validé « {statement} » : je rédige la fiche de décision et j'ouvre "
             "la pull request…"
+        ),
+        "announce_failed": (
+            "Interrompu : le modèle n'a pas répondu (détails dans le journal de l'agent). "
+            "Réessayez dans un instant."
         ),
         "decision_ignored": "Décision ignorée par {user}.",
         "decision_draft_failed": (
