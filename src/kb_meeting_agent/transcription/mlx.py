@@ -23,6 +23,7 @@ class MlxWhisperTranscriber:
             import mlx_whisper as module
         self._mlx = module
         self._model = role.model
+        self._options = {} if role.temperature_fallback else {"temperature": 0.0}
 
     def transcribe(
         self, audio: np.ndarray, *, language: str | None, prompt: str
@@ -34,6 +35,7 @@ class MlxWhisperTranscriber:
                 language=language,
                 initial_prompt=prompt or None,
                 condition_on_previous_text=False,
+                **self._options,
             )
         segments = result.get("segments", [])
         probabilities = [s["no_speech_prob"] for s in segments if "no_speech_prob" in s]

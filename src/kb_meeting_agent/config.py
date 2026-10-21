@@ -98,6 +98,9 @@ class TranscriberRole(_Strict):
     device: str = "auto"
     compute_type: str = "int8"
     beam_size: int = Field(1, ge=1)
+    # mlx-whisper, faster-whisper: decode again at higher temperatures when the text loops or
+    # the model is unsure (up to 6 decodings of the utterance)
+    temperature_fallback: bool = True
 
 
 class TranscriptionConfig(_Strict):
