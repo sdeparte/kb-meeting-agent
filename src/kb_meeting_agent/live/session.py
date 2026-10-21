@@ -659,11 +659,14 @@ class MeetingSession:
                 meeting_date=meeting_date,
             ),
         )
-        # The agent's own names first, so that Whisper spells them right when people call it.
-        names = ", ".join(self.deps.config.agent.names)
-        room = max(0, self._transcription.vocabulary_max_chars - len(names) - 2)
-        terms = vocabulary_prompt(kb.glossary(), room)
-        prompt = f"{names}, {terms}" if terms else names
+        # The agent's name first, so that Whisper spells it right when people call it. Not
+        # its aliases: they are often misspellings, which the hint would teach Whisper.
+        # The whole glossary: the hint keeps its own length, and a cut page would stop it at "C".
+        prompt = vocabulary_prompt(
+            kb.glossary(max_chars=None),
+            self._transcription.vocabulary_max_chars,
+            first=[self.deps.config.agent.name, *self._transcription.vocabulary],
+        )
         pipeline = TranscriptionPipeline(
             self.deps.live_transcriber,
             language=self._transcription.language,

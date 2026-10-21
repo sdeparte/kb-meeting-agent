@@ -11,10 +11,20 @@ from live.helpers import Clock, FakeLink
 
 @pytest.fixture
 def make_session(tmp_path, kb_origin):
-    def factory(*, fast=None, strong=None, live=None, final=None, publisher=None, **defaults):
+    def factory(
+        *,
+        fast=None,
+        strong=None,
+        live=None,
+        final=None,
+        publisher=None,
+        agent=None,
+        transcription=None,
+        **defaults,
+    ):
         config = AppConfig.model_validate(
             {
-                "agent": {"name": "Scribe"},
+                "agent": agent or {"name": "Scribe"},
                 "data_dir": str(tmp_path / "data"),
                 "llm": {
                     role: {"provider": "fake", "model": "fake"}
@@ -26,6 +36,7 @@ def make_session(tmp_path, kb_origin):
                     "live": {"provider": "fake", "model": "fake"},
                     "min_utterance_seconds": 0,
                     "min_voiced_seconds": 0,
+                    **(transcription or {}),
                 },
             }
         )
