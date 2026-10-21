@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import re
 import wave
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -126,6 +127,13 @@ DEFAULT_HALLUCINATIONS = (
     "Thanks for watching",
 )
 
+
+def compression_ratio(text: str) -> float:
+    """Whisper's own loop detector: a text repeating itself compresses far better than speech."""
+    data = text.encode("utf-8")
+    return len(data) / len(zlib.compress(data)) if data else 0.0
+
+
 # What Whisper writes for noise or breath; dropped only when it is the whole utterance.
 LONE_HALLUCINATIONS = ("merci", "merci beaucoup", "thank you", "thank you very much")
 
@@ -152,12 +160,14 @@ class HallucinationFilter:
         *,
         min_voiced_seconds: float = 0.0,
         min_avg_logprob: float | None = None,
+        max_compression_ratio: float | None = None,
     ) -> None:
         self._phrases = sorted({*DEFAULT_HALLUCINATIONS, *phrases}, key=len, reverse=True)
         self._min_seconds = min_seconds
         self._max_no_speech_prob = max_no_speech_prob
         self._min_voiced_seconds = min_voiced_seconds
         self._min_avg_logprob = min_avg_logprob
+        self._max_compression_ratio = max_compression_ratio
 
     def audible(self, audio: np.ndarray) -> bool:
         """Checked before transcribing: Whisper fills near-silence with "Merci." and the like."""
@@ -175,6 +185,11 @@ class HallucinationFilter:
         ):
             return None
         original = " ".join(result.text.replace("’", "'").split())
+        if (
+            self._max_compression_ratio is not None
+            and compression_ratio(original) > self._max_compression_ratio
+        ):
+            return None  # Whisper stuck in a loop: "Eik, Disa, Eik, Disa, …"
         text = original
         for phrase in self._phrases:
             text = _strip_sentence(text, phrase)

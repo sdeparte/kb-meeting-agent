@@ -100,6 +100,7 @@ The connector only receives the Discord token, the guild id and the local connec
 | `hallucination_phrases` | `[]` | phrases removed from transcriptions, on top of the built-in list ("Sous-titres réalisés par la communauté d'Amara.org", "Thanks for watching"…); an utterance that is only "Merci." or "Thank you." is also dropped |
 | `min_utterance_seconds` | `0.4` | shorter utterances are dropped |
 | `max_no_speech_prob` | `0.6` | utterances the engine marks as probably not speech are dropped (mlx-whisper always reports 0, so it never fires there) |
+| `max_compression_ratio` | `2.4` | transcriptions that compress better than this are dropped: Whisper stuck in a loop ("Eik, Disa, Eik, Disa, …"). Speech, even repeating a phrase three times, stays under 2; `null` disables. Whisper uses the same threshold |
 | `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
 | `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
 | `vocabulary` | `[]` | terms hinted to Whisper before the glossary, e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
