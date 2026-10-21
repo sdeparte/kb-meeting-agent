@@ -1,7 +1,7 @@
 # Copy to config.yml (git-ignored) and adjust. Secrets come from environment variables.
 agent:
   name: Scribe        # how the agent introduces itself and appears in the minutes
-  aliases: []         # other ways to address it, e.g. how Whisper misspells the name
+  aliases: []         # other ways to address it, e.g. how Whisper misspells the name (not hinted to Whisper)
 data_dir: ~/.local/share/kb-meeting-agent
 
 llm:

@@ -35,7 +35,7 @@ defaults:
 | Key | Default | Meaning |
 |---|---|---|
 | `agent.name` | `agent` | the agent's name. A segment containing it (whole word, ignoring case and accents) is a request to the agent. The agent introduces itself with it in the recording notice, the minutes name it "<name> (AI)" ("(IA)" in French), and it is given to Whisper as a vocabulary hint. Prefer a word nobody says by accident. |
-| `agent.aliases` | `[]` | other words that address the agent, e.g. a variant spelling or how Whisper tends to transcribe the name |
+| `agent.aliases` | `[]` | other words that address the agent, e.g. a variant spelling or how Whisper tends to transcribe the name. They are only used to recognise that the agent is addressed: unlike `agent.name`, they are not hinted to Whisper, which would learn the misspellings |
 | `data_dir` | `~/.local/share/kb-meeting-agent` | where KB clones and search indexes are kept (`kb/<name>/repo`, `kb/<name>/index.sqlite`) |
 
 ### `llm.fast`, `llm.strong`, `llm.embedding`
@@ -103,7 +103,7 @@ The connector only receives the Discord token, the guild id and the local connec
 | `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
 | `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
 | `vocabulary` | `[]` | terms hinted to Whisper before the glossary, e.g. `[KB]` so that "la KB" is not heard as "l'AKB" |
-| `vocabulary_max_chars` | `600` | length of the vocabulary hint: the agent's `agent.name` (not its aliases), then `vocabulary`, then the terms of the KB glossary's tables (first cells, then `code` spans), leaving out status tags, commit hashes and code identifiers |
+| `vocabulary_max_chars` | `600` | length of the vocabulary hint: the agent's `agent.name` (not its aliases), then `vocabulary`, then the terms of the KB glossary's tables (first cells, then `code` spans), leaving out status tags, commit hashes and, among the `code` spans, code identifiers |
 
 Engine keys (`live`, `final`):
 

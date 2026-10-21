@@ -104,3 +104,12 @@ def test_fake_transcriber_records_calls():
     assert fake.transcribe(audio, language="fr", prompt="").no_speech_prob == 0.2
     assert fake.transcribe(audio, language=None, prompt="").text == "encore"
     assert fake.calls[0] == (16000, "fr", "BIO-SCAN")
+
+
+def test_vocabulary_prompt_keeps_terms_that_look_like_identifiers():
+    glossary = """| Terme | Définition | Code |
+|---|---|---|
+| **iOS** | client mobile | `iosClient` |
+| **Node.js** | serveur | `node.js` |
+"""
+    assert vocabulary_prompt(glossary, 600) == "iOS, Node.js"

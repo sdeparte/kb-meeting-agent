@@ -76,11 +76,15 @@ _COMMIT_HASH = re.compile(r"^(?=.*\d)[0-9a-f]{7,40}$")
 _IDENTIFIER = re.compile(r"[/.:(){}=_]|[a-z][A-Z]")  # paths, calls, snake_case, camelCase
 
 
-def _spoken(term: str) -> bool:
-    """Whether people may say the term: not a status tag, a commit hash or a code identifier."""
-    if _STATUS_TAG.match(term) or _COMMIT_HASH.match(term):
-        return False
-    return " " in term or not _IDENTIFIER.search(term)
+def _named(term: str) -> bool:
+    """Whether the term names something: not a status tag or a commit hash."""
+    return not (_STATUS_TAG.match(term) or _COMMIT_HASH.match(term))
+
+
+def _spoken(span: str) -> bool:
+    """Whether people may say a `code` span: not a code identifier either. Only spans are
+    checked for identifiers: a glossary term such as "iOS" or "Node.js" looks like one."""
+    return _named(span) and (" " in span or not _IDENTIFIER.search(span))
 
 
 def vocabulary_prompt(glossary: str, max_chars: int, first: list[str] | None = None) -> str:
@@ -97,8 +101,9 @@ def vocabulary_prompt(glossary: str, max_chars: int, first: list[str] | None = N
             terms.append(_CODE.sub(r"\1", first_cell).strip().strip("*").strip())
             spans.extend(_CODE.findall(line))
     unique: list[str] = list(dict.fromkeys(t for t in first or [] if t))
-    for term in terms + spans:
-        if term and len(term) <= 60 and _spoken(term) and term not in unique:
+    candidates = [t for t in terms if _named(t)] + [s for s in spans if _spoken(s)]
+    for term in candidates:
+        if term and len(term) <= 60 and term not in unique:
             unique.append(term)
     prompt = ""
     for term in unique:
