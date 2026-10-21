@@ -168,6 +168,7 @@ async def test_the_minutes_are_rendered_in_the_kb_language_without_empty_section
             DecisionRecord("Cooldown à 30 s", "validated", "https://example.test/pull/1"),
             DecisionRecord("Garder le BLE", "kept", None),
             DecisionRecord("Abandonner le BLE", "ignored", None),
+            DecisionRecord("Passer au QR code", "pending", None),
         ],
         flags=[Flag("cooldown", "Cooldown à 30 s", "contradicts", "`45`", "c.md#N", "", None)],
         instructions="",
@@ -182,6 +183,7 @@ async def test_the_minutes_are_rendered_in_the_kb_language_without_empty_section
         "### BLE\n\n- **Bob** veut le garder.\n\n"
         "## Décisions\n\n- Cooldown à 30 s (https://example.test/pull/1)\n"
         "- Garder le BLE (validée, pull request pas encore publiée)\n\n"
+        "## Décisions en attente de validation\n\n- Passer au QR code\n\n"
         "## Décisions proposées non retenues\n\n- Abandonner le BLE\n\n"
         "## Contradictions avec la KB\n\n- Cooldown à 30 s — la KB dit “`45`” (`c.md#N`)\n\n"
         "## Trous de transcription\n\n- 00:05:00 → 00:06:10"

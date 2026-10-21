@@ -142,7 +142,8 @@ def render_minutes(
     """The minutes' Markdown: sections and headings in the KB's language, written here rather
     than by the model, which a small one gets wrong (English headings, "(none)" sections)."""
     retained = [d for d in decisions if d.state in ("validated", "kept")]
-    dropped = [d for d in decisions if d.state not in ("validated", "kept")]
+    pending = [d for d in decisions if d.state == "pending"]  # never decided, or a failed draft
+    dropped = [d for d in decisions if d.state not in ("validated", "kept", "pending")]
     sections: list[tuple[str, list[str]]] = [
         ("minutes_participants", _bullets(participants)),
         ("minutes_agenda", _bullets(content.agenda)),
@@ -165,6 +166,7 @@ def render_minutes(
                 for d in retained
             ],
         ),
+        ("minutes_pending", [f"- {d.statement}" for d in pending]),
         ("minutes_not_retained", [f"- {d.statement}" for d in dropped]),
         (
             "minutes_contradictions",
