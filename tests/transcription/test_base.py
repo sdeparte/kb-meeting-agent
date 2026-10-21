@@ -94,7 +94,8 @@ def test_hallucination_filter_confidence_and_silence():
     silence = np.full(8000, 0.001, dtype=np.float32)  # -60 dBFS, half a second
     speech = np.concatenate([silence, np.full(8000, 0.1, dtype=np.float32)])
     assert voiced_seconds(silence) == 0 and voiced_seconds(speech) == 0.5
-    assert not cleaner.audible(silence) and cleaner.audible(speech)
+    assert not cleaner.audible(silence, 0.5) and cleaner.audible(speech, 1.0)
+    assert not cleaner.audible(speech, 0.3)  # too short to keep: not worth transcribing
 
 
 def test_fake_transcriber_records_calls():
