@@ -113,3 +113,17 @@ def test_vocabulary_prompt_keeps_terms_that_look_like_identifiers():
 | **Node.js** | serveur | `node.js` |
 """
     assert vocabulary_prompt(glossary, 600) == "iOS, Node.js"
+
+
+def test_hallucination_filter_drops_whisper_loops():
+    # Lines of a real meeting: the loops compress 7 to 17 times, speech under 2.
+    clean = HallucinationFilter(
+        [], min_seconds=0, max_no_speech_prob=1, max_compression_ratio=2.4
+    ).clean
+    loop = "Eik, Disa, " * 37
+    assert clean(TranscriptionResult(loop), 30.0) is None
+    assert clean(TranscriptionResult("Channadam a long shire. " * 20), 30.0) is None
+    repeated = "Attention, nous sommes surveillés, nous sommes surveillés, nous sommes surveillés !"
+    assert clean(TranscriptionResult(repeated), 5.0) == repeated
+    no_check = HallucinationFilter([], min_seconds=0, max_no_speech_prob=1).clean
+    assert no_check(TranscriptionResult(loop), 30.0) == loop.strip()
