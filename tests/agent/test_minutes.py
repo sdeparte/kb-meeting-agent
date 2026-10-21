@@ -157,7 +157,7 @@ async def test_the_minutes_are_rendered_in_the_kb_language_without_empty_section
         topics=[
             {"title": "## Cooldown", "points": ["- Alice propose 30 s.", "Otis (IA) cite 45 s."]},
             {"title": "Vide", "points": []},
-            {"title": "BLE", "points": ["Bob veut le garder."]},
+            {"title": "BLE", "points": ["* **Bob** veut le garder."]},
         ],
     )
     strong = FakeProvider({"SliceSummary": [{"summary": "s"}], "MinutesContent": [content]})
@@ -179,7 +179,7 @@ async def test_the_minutes_are_rendered_in_the_kb_language_without_empty_section
         "## Participants\n\n- Alice\n\n"
         "## Ordre du jour\n\n- Cooldown\n\n"
         "## Discussion\n\n### Cooldown\n\n- Alice propose 30 s.\n- Otis (IA) cite 45 s.\n\n"
-        "### BLE\n\n- Bob veut le garder.\n\n"
+        "### BLE\n\n- **Bob** veut le garder.\n\n"
         "## Décisions\n\n- Cooldown à 30 s (https://example.test/pull/1)\n"
         "- Garder le BLE (validée, pull request pas encore publiée)\n\n"
         "## Décisions proposées non retenues\n\n- Abandonner le BLE\n\n"

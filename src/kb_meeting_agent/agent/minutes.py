@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -188,9 +189,12 @@ def render_minutes(
 _VERDICTS = {"already_rejected": "minutes_already_rejected"}
 
 
+_MARKERS = re.compile(r"^(?:(?:#+|[-*•])\s+)+")  # "## ", "- ", "* ", but not "**bold**"
+
+
 def _plain(text: str) -> str:
     """One line without the Markdown a model adds anyway: heading marks, bullets."""
-    return " ".join(text.split()).lstrip("#-*• ").strip()
+    return _MARKERS.sub("", " ".join(text.split()))
 
 
 def _bullets(items: Sequence[str]) -> list[str]:
