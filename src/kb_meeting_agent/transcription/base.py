@@ -169,9 +169,10 @@ class HallucinationFilter:
         self._min_avg_logprob = min_avg_logprob
         self._max_compression_ratio = max_compression_ratio
 
-    def audible(self, audio: np.ndarray) -> bool:
-        """Checked before transcribing: Whisper fills near-silence with "Merci." and the like."""
-        return voiced_seconds(audio) >= self._min_voiced_seconds
+    def audible(self, audio: np.ndarray, duration_s: float) -> bool:
+        """Checked before transcribing: Whisper fills near-silence with "Merci." and the like,
+        and an utterance too short to keep would only take the GPU from the others."""
+        return duration_s >= self._min_seconds and voiced_seconds(audio) >= self._min_voiced_seconds
 
     def clean(self, result: TranscriptionResult, duration_s: float) -> str | None:
         if duration_s < self._min_seconds:

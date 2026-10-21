@@ -90,6 +90,14 @@ async def test_silent_utterances_are_not_transcribed(tmp_path):
     assert pipeline.lag_s == 7.0
 
 
+async def test_short_utterances_are_not_transcribed(tmp_path):
+    transcriber = SlowFirst()
+    pipeline, received = make(tmp_path, transcriber)
+    pipeline.submit(utterance(tmp_path, 0, "a", 2_000, 300))  # under min_seconds
+    await pipeline.drain()
+    assert transcriber.calls == 0 and received == []
+
+
 async def test_lag_and_engine_errors(tmp_path):
     class Broken:
         def transcribe(self, audio, *, language, prompt):
