@@ -35,9 +35,29 @@ def test_pcm_round_trip_and_wav(tmp_path):
 
 def test_vocabulary_prompt_extracts_terms_and_skips_headers():
     prompt = vocabulary_prompt(GLOSSARY, 600)
-    assert prompt == "BIO-SCAN, biometric, Brouillage, jammed, RSSI_PROXIMITY_THRESHOLD"
-    assert vocabulary_prompt(GLOSSARY, 20) == "BIO-SCAN, biometric"
+    assert prompt == "BIO-SCAN, Brouillage, biometric, jammed"
+    assert vocabulary_prompt(GLOSSARY, 20) == "BIO-SCAN, Brouillage"
     assert vocabulary_prompt("", 600) == ""
+
+
+def test_vocabulary_prompt_puts_first_terms_ahead():
+    assert vocabulary_prompt(GLOSSARY, 600, first=["Otis", "KB", "BIO-SCAN"]) == (
+        "Otis, KB, BIO-SCAN, Brouillage, biometric, jammed"
+    )
+    assert vocabulary_prompt("", 600, first=["Otis"]) == "Otis"
+
+
+def test_vocabulary_prompt_leaves_out_what_nobody_says():
+    glossary = """> Relu sur `main` @ `4978b63` (`lib/l10n/app_fr.arb`).
+
+| Terme | Définition | Code |
+|---|---|---|
+| **[PROD]** | statut | — |
+| **Attente serveur (pending)** | relu @ `08d77ea` | `showPending`, `PendingLayer`, `AppDurations.pendingSlowTier` |
+| **CAS** | boucle `PlayerMutator::mutate()`, route `beacon/scan` | `status_effect` |
+| **Corpo** | faction | `impostor` |
+"""
+    assert vocabulary_prompt(glossary, 600) == "Attente serveur (pending), CAS, Corpo, impostor"
 
 
 def test_hallucination_filter():
