@@ -3,7 +3,7 @@ from datetime import date
 
 import httpx
 import pytest
-from conftest import commit_file
+from conftest import commit_file, minutes_content
 
 from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.transcript import Transcript
@@ -232,7 +232,7 @@ async def test_end_publishes_minutes_with_decision_links(make_agent):
     strong = FakeProvider(
         {
             "DecisionDraft": [DRAFT],
-            "MinutesDraft": [{"title": "Weekly", "slug": "weekly", "body": "## Decisions"}],
+            "MinutesContent": [minutes_content("Weekly", "weekly")],
         }
     )
     agent, _, strong, publisher, sink = make_agent(fast, strong)
@@ -245,7 +245,7 @@ async def test_end_publishes_minutes_with_decision_links(make_agent):
     assert files["meetings/README.md"].endswith(
         "|---|---|---|\n| 2026-10-15 | [Weekly](2026-10-15-weekly.md) | Alice |\n"
     )
-    assert "https://example.test/pull/1" in strong.calls_for("MinutesDraft")[0][2]
+    assert "https://example.test/pull/1" in strong.calls_for("MinutesContent")[0][2]
     assert pr.url == "https://example.test/pull/2"
     assert sink.texts()[-1] == "Meeting minutes: https://example.test/pull/2"
 
@@ -322,7 +322,7 @@ async def test_failed_publication_is_kept_locally(make_agent, tmp_path):
     strong = FakeProvider(
         {
             "DecisionDraft": [DRAFT],
-            "MinutesDraft": [{"title": "Weekly", "slug": "weekly", "body": "x"}],
+            "MinutesContent": [minutes_content("Weekly", "weekly")],
         }
     )
     agent, *_, sink = make_agent(fast, strong)
@@ -369,7 +369,7 @@ async def test_unexpected_publish_error_keeps_the_work(make_agent, tmp_path):
     strong = FakeProvider(
         {
             "DecisionDraft": [DRAFT],
-            "MinutesDraft": [{"title": "Weekly", "slug": "weekly", "body": "x"}],
+            "MinutesContent": [minutes_content("Weekly", "weekly")],
         }
     )
     agent, *_, sink = make_agent(fast, strong)
@@ -478,14 +478,14 @@ async def test_snapshot_round_trip(make_agent):
 
 
 async def test_end_sorts_segments_and_reports_gaps(make_agent):
-    strong = FakeProvider({"MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}]})
+    strong = FakeProvider({"MinutesContent": [minutes_content("W", "w")]})
     agent, _, strong, *_ = make_agent(strong=strong, extraction_interval_s=1000)
     await agent.on_segment(seg(0, "a"))
     late = Segment("b", "Bob", 700, 705, "b")
     early = Segment("c", "Carol", 5, 9, "c")
     await agent.end(segments=[late, early], gaps=[(60.0, 75.0)])
     assert len(strong.calls_for("SliceSummary")) == 2
-    assert "00:01:00" in strong.calls_for("MinutesDraft")[0][2]
+    assert "00:01:00" in strong.calls_for("MinutesContent")[0][2]
 
 
 async def test_refresh_rebuilds_open_decision_prs_on_the_current_base(make_agent, kb, kb_origin):
@@ -617,12 +617,12 @@ async def test_a_reworded_decision_keeps_its_first_wording(make_agent):
 
 
 async def test_the_minutes_receive_the_interactions(make_agent):
-    strong = FakeProvider({"MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}]})
+    strong = FakeProvider({"MinutesContent": [minutes_content("W", "w")]})
     agent, _, strong, *_ = make_agent(strong=strong, extraction_interval_s=1000)
     await agent.on_segment(seg(0, "hello"))
     await agent.ask("What is the cooldown?", user="Bob")
     await agent.end()
-    _, system, user = strong.calls_for("MinutesDraft")[0]
+    _, system, user = strong.calls_for("MinutesContent")[0]
     assert "Scribe (AI)" in system
     assert "INTERACTIONS WITH Scribe (AI):\n- [00:00:31] Bob asked Scribe (AI)" in user
 
@@ -634,3 +634,12 @@ async def test_interactions_survive_a_snapshot(make_agent):
     clone, *_ = make_agent()
     clone.restore(json.loads(json.dumps(agent.snapshot())))
     assert lines(clone) == lines(agent)
+
+
+async def test_exchanges_are_recorded_in_the_kb_language(make_agent, kb, kb_origin):
+    commit_file(kb_origin, ".meeting-agent.yml", "language: fr\n")
+    await kb.sync()
+    agent, *_ = make_agent(extraction_interval_s=1000)
+    await agent.on_segment(seg(0, "hello"))
+    await agent.set_level("silent", announce=False, user="Carol")
+    assert lines(agent) == ["Carol a réglé Scribe (IA) sur le niveau silent"]
