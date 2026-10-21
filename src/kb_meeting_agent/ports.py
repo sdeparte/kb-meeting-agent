@@ -25,6 +25,7 @@ class Button:
 class OutMessage:
     text: str
     buttons: tuple[Button, ...] = ()
+    reply_to: str | None = None  # the id a sink returned for an earlier message
 
 
 @dataclass(frozen=True)

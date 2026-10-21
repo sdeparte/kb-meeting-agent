@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Awaitable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 from pathlib import Path
@@ -131,6 +132,7 @@ class MeetingAgent:
         self._last_context_at: float | None = None
         self._paused = False
         self._reported_errors: set[str] = set()
+        self._thread: str | None = None  # the announcement the agent's messages answer
         self.interactions: list[Interaction] = []
 
     @property
@@ -145,8 +147,19 @@ class MeetingAgent:
     def _record(self, text: str) -> None:
         self.interactions.append(Interaction(self._latest_end, text))
 
-    async def _say(self, text: str, buttons: tuple[Button, ...] = ()) -> None:
-        await self.sink.send(OutMessage(text=text, buttons=buttons))
+    async def _say(self, text: str, buttons: tuple[Button, ...] = ()) -> str:
+        return await self.sink.send(OutMessage(text=text, buttons=buttons, reply_to=self._thread))
+
+    @asynccontextmanager
+    async def _announce(self, key: str, **values: object) -> AsyncIterator[None]:
+        """Say what the agent is about to do, at once: answering takes a while, and silence
+        reads as not heard. What it says until it is done answers that message."""
+        ref = await self._say(t(self._lang, key, **values))
+        previous, self._thread = self._thread, ref
+        try:
+            yield
+        finally:
+            self._thread = previous
 
     async def _guard(self, step: Awaitable[None]) -> None:
         """Run a model-backed step; never let a model failure stop the meeting."""
@@ -300,16 +313,17 @@ class MeetingAgent:
         )
         if intent.kind == "question":
             question = intent.question or segment.text
-            text = await answer_question(
-                self.fast,
-                self.strong,
-                self.kb,
-                question=question,
-                context=context,
-                language=self._lang,
-            )
-            self._record_answer(segment.speaker_name, question, text)
-            await self._say(text)
+            async with self._announce("announce_searching", question=question):
+                text = await answer_question(
+                    self.fast,
+                    self.strong,
+                    self.kb,
+                    question=question,
+                    context=context,
+                    language=self._lang,
+                )
+                self._record_answer(segment.speaker_name, question, text)
+                await self._say(text)
         elif intent.kind == "set_level" and intent.level in LEVELS:
             await self.set_level(intent.level, user=segment.speaker_name)
         elif intent.kind in ("validate", "ignore"):
@@ -385,6 +399,10 @@ class MeetingAgent:
             await self._say(t(self._lang, "decision_ignored", user=user))
 
     async def _validate(self, decision: PendingDecision, user: str) -> None:
+        async with self._announce("announce_validating", user=user, statement=decision.statement):
+            await self._draft_and_publish(decision, user)
+
+    async def _draft_and_publish(self, decision: PendingDecision, user: str) -> None:
         conventions = self.kb.conventions.decisions
         chunks = await self.kb.search(decision.statement, k=6)
         excerpt = format_segments(list(decision.excerpt))

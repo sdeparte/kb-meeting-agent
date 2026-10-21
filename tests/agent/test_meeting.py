@@ -193,7 +193,11 @@ async def test_addressed_question_is_answered(make_agent):
     )
     agent, *_, sink = make_agent(fast, strong, extraction_interval_s=1000)
     await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
-    assert sink.texts()[0].startswith("45 s.")
+    announcement, answer = sink.messages
+    assert announcement.text == "🔎 Searching the KB: “What is the cooldown?”"
+    assert announcement.reply_to is None
+    assert answer.text.startswith("45 s.")
+    assert answer.reply_to == "1"  # the id the sink gave the announcement
 
 
 async def test_voice_commands(make_agent):
@@ -634,3 +638,18 @@ async def test_interactions_survive_a_snapshot(make_agent):
     clone, *_ = make_agent()
     clone.restore(json.loads(json.dumps(agent.snapshot())))
     assert lines(clone) == lines(agent)
+
+
+async def test_a_validation_is_announced_and_its_result_answers_it(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, *_, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    proposal = len(sink.messages)
+    await agent.on_button("decision:d1:validate", "Bob")
+    announcement, published = sink.messages[proposal:]
+    assert announcement.text.startswith("✍️ Bob validated “Cooldown is 30 seconds”")
+    assert published.text == "Decision validated by Bob: https://example.test/pull/1"
+    assert published.reply_to == str(proposal + 1)
+    await agent.on_button("decision:d1:validate", "Bob")  # already validated: nothing to do
+    assert len(sink.messages) == proposal + 2

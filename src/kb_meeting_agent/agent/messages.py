@@ -10,6 +10,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "context": "Related KB page: {anchor}",
         "decision_detected": "Decision detected: *{statement}*",
         "decision_published": "Decision validated by {user}: {url}",
+        "announce_searching": "🔎 Searching the KB: “{question}”",
+        "announce_validating": (
+            "✍️ {user} validated “{statement}”: drafting the decision record and opening "
+            "the pull request…"
+        ),
         "decision_ignored": "Decision ignored by {user}.",
         "decision_draft_failed": (
             "Could not write the decision record: the model did not give a usable answer (the "
@@ -98,6 +103,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "context": "Page de la KB liée : {anchor}",
         "decision_detected": "Décision détectée : *{statement}*",
         "decision_published": "Décision validée par {user} : {url}",
+        "announce_searching": "🔎 Je cherche dans la KB : « {question} »",
+        "announce_validating": (
+            "✍️ {user} a validé « {statement} » : je rédige la fiche de décision et j'ouvre "
+            "la pull request…"
+        ),
         "decision_ignored": "Décision ignorée par {user}.",
         "decision_draft_failed": (
             "Impossible de rédiger la fiche de décision : le modèle n'a pas donné de réponse "

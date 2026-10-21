@@ -67,6 +67,7 @@ class ConnectorSink:
             channel_id=self._channel_id,
             text=message.text,
             buttons=buttons,
+            **({"reply_to": message.reply_to} if message.reply_to else {}),
         )
         return request_id
 

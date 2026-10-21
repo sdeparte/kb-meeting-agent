@@ -266,3 +266,24 @@ async def test_the_whisper_hint_leaves_out_the_aliases_and_adds_the_vocabulary(m
     await session.settle()
     assert live.calls[0][2].startswith("Otis, KB")
     assert "Otisse" not in live.calls[0][2]
+
+
+async def test_the_answer_to_a_spoken_question_replies_to_its_announcement(make_session):
+    fast = FakeProvider(
+        {
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"]}],
+        }
+    )
+    strong = FakeProvider({"Answer": [{"covered": True, "answer": "45 s.", "sources": []}]})
+    live = FakeTranscriber(default="Scribe, what is the cooldown?")
+    session, link, *_ = make_session(fast=fast, strong=strong, live=live)
+    await start(session)
+    await speak(session)
+    await session.settle()
+    *_, announcement, answer = link.of("send")
+    assert announcement["text"].startswith("🔎")
+    assert "reply_to" not in announcement
+    assert answer["reply_to"] == announcement["request_id"]
