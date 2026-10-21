@@ -537,6 +537,17 @@ async def test_set_level_and_ask(make_agent):
     assert (await agent.ask("What is the cooldown?")).startswith("45 s.")
 
 
+async def test_the_classifier_gets_the_level_before_the_last_change(make_agent):
+    fast = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
+    agent, *_ = make_agent(fast)
+    await agent.set_level("context", announce=False)
+    await agent.set_level("silent", announce=False)
+    await agent.set_level("silent", announce=False)  # not a change: "as before" stays context
+    await agent.on_segment(seg(0, "scribe, comme avant"))
+    prompt = next(user for _, _, user in fast.calls if "UTTERANCE ADDRESSED" in user)
+    assert "YOUR LEVEL: silent (previous: context, default: contradictions)" in prompt
+
+
 async def test_snapshot_round_trip(make_agent):
     fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
     strong = FakeProvider({"DecisionDraft": [DRAFT]})
