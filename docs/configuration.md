@@ -114,6 +114,7 @@ Engine keys (`live`, `final`):
 | `model` | model name or Hugging Face repository |
 | `base_url`, `api_key` | `openai-compatible` only |
 | `device`, `compute_type`, `beam_size` | `faster-whisper` only (`auto`, `int8`, `1`) |
+| `temperature_fallback` | `mlx-whisper` and `faster-whisper` (default `true`): when the text loops or the model is unsure, decode the utterance again at higher temperatures, up to 6 times. Set `false` on `live`: these retries are mostly on noise that is dropped anyway, and they hold up the utterances behind them (on recorded meetings: half of the GPU time, up to 8 s for one utterance, for 2 utterances in 100 rescued). Keep it on `final`, which has the time |
 
 Without a GitHub `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
 

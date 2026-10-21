@@ -34,6 +34,31 @@ def test_mlx_whisper_passes_audio_prompt_and_language():
     assert calls["path_or_hf_repo"] == "mlx-community/whisper-large-v3-turbo"
     assert calls["language"] == "fr" and calls["initial_prompt"] == "BIO-SCAN"
     assert calls["condition_on_previous_text"] is False and calls["n"] == 1600
+    assert "temperature" not in calls  # the library's fallback temperatures
+
+
+def test_temperature_fallback_can_be_switched_off():
+    calls = {}
+
+    def transcribe(audio, **kwargs):
+        calls.update(kwargs)
+        return {"text": "", "segments": []}
+
+    class Model:
+        def __init__(self, name, **kwargs):
+            pass
+
+        def transcribe(self, audio, **kwargs):
+            calls["faster"] = kwargs["temperature"]
+            return iter([]), None
+
+    role = TranscriberRole(provider="mlx-whisper", model="m", temperature_fallback=False)
+    MlxWhisperTranscriber(role, module=SimpleNamespace(transcribe=transcribe)).transcribe(
+        AUDIO, language="fr", prompt=""
+    )
+    role = TranscriberRole(provider="faster-whisper", model="m", temperature_fallback=False)
+    FasterWhisperTranscriber(role, model_factory=Model).transcribe(AUDIO, language="fr", prompt="")
+    assert calls["temperature"] == 0.0 and calls["faster"] == 0.0
 
 
 def test_faster_whisper_joins_segments():
