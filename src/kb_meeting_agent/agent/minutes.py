@@ -25,18 +25,43 @@ class SliceSummary(Schema):
     summary: str
 
 
-class MinutesDraft(Schema):
+@dataclass(frozen=True)
+class MinutesDraft:
     title: str
     slug: str
     body: str
 
 
+class Topic(Schema):
+    title: str
+    points: list[str]
+
+
+class MinutesContent(Schema):
+    title: str
+    slug: str
+    agenda: list[str]
+    topics: list[Topic]
+    action_items: list[str]
+    open_questions: list[str]
+
+
+PEOPLE_RULE = """Name people only by their speaker names, and the AI assistant {agent}. Never replace "he", "she" or "it" by a nickname or a remark someone made about them. Leave out jokes, teasing and remarks about people that are not about the meeting's subjects."""
+
 SLICE_SYSTEM = """Summarize this part of a meeting transcript in language "{language}": points discussed, who said what when it matters, open questions.
+{people}
 Factual, no invention, at most 250 words."""
 
 MINUTES_SYSTEM = """You write the detailed minutes of a meeting for a knowledge base, following the KB's conventions below.
-Use only the material provided: attribute each point to who said it and never add details, intents or interpretations the transcript does not state. The transcript is automatic: leave out isolated words that carry nothing (a lone "thank you", an unknown word) instead of narrating them. `body` is Markdown with level-2 headings for: participants, agenda (inferred), discussion (one sub-section per topic), decisions (link each validated decision to its pull request URL), decisions proposed but not retained, contradictions with the KB that were raised, action items (with owner when stated), open questions, transcription gaps. Omit a section only when it has no content.
-The meeting has an AI assistant, {agent}. Integrate the interactions with it where they belong (who asked it what, what it answered or pointed out, which of its proposals were validated or dismissed), always naming it {agent}; no separate section.
+Use only the material provided: attribute each point to who said it and never add details, intents or interpretations the transcript does not state. The transcript is automatic: leave out isolated words that carry nothing (a lone "thank you", an unknown word) instead of narrating them.
+{people}
+Fill the fields; the decisions, the KB contradictions and the transcription gaps are listed apart from them, so do not repeat them as such:
+- `agenda`: the subjects of the meeting, inferred, a few words each.
+- `topics`: one per subject discussed, with a short `title` and its `points`, each one sentence saying who said or asked what.
+- `action_items`: what someone will do, with the owner when stated.
+- `open_questions`: questions left unanswered.
+Plain sentences: no Markdown headings or bullets. Use empty lists when nothing qualifies.
+The meeting has an AI assistant, {agent}. Put the interactions with it in the topic they belong to (who asked it what, what it answered or pointed out, which of its proposals were validated or dismissed), always naming it {agent}.
 `title` is short; `slug` is kebab-case ASCII. Write in language "{language}".
 
 KB CONVENTIONS:
@@ -60,7 +85,7 @@ async def write_minutes(
     for slice_index, part in groupby(segments, key=lambda s: int(s.start // slice_seconds)):
         result = await complete(
             strong,
-            SLICE_SYSTEM.format(language=language),
+            SLICE_SYSTEM.format(language=language, people=PEOPLE_RULE.format(agent=agent_label)),
             format_segments(list(part)),
             SliceSummary,
         )
@@ -87,9 +112,89 @@ async def write_minutes(
         + ("\n".join(f"- [{format_timestamp(at)}] {line}" for at, line in interactions) or "(none)")
     )
     system = MINUTES_SYSTEM.format(
-        language=language, instructions=instructions or "(none)", agent=agent_label
+        language=language,
+        instructions=instructions or "(none)",
+        agent=agent_label,
+        people=PEOPLE_RULE.format(agent=agent_label),
     )
-    return await complete(strong, system, user, MinutesDraft)
+    content = await complete(strong, system, user, MinutesContent)
+    body = render_minutes(
+        content,
+        participants=participants,
+        decisions=decisions,
+        flags=flags,
+        gaps=gaps,
+        language=language,
+    )
+    return MinutesDraft(title=content.title, slug=content.slug, body=body)
+
+
+def render_minutes(
+    content: MinutesContent,
+    *,
+    participants: list[str],
+    decisions: Sequence[DecisionRecord],
+    flags: Sequence[Flag],
+    gaps: Sequence[tuple[float, float]],
+    language: str,
+) -> str:
+    """The minutes' Markdown: sections and headings in the KB's language, written here rather
+    than by the model, which a small one gets wrong (English headings, "(none)" sections)."""
+    retained = [d for d in decisions if d.state in ("validated", "kept")]
+    dropped = [d for d in decisions if d.state not in ("validated", "kept")]
+    sections: list[tuple[str, list[str]]] = [
+        ("minutes_participants", _bullets(participants)),
+        ("minutes_agenda", _bullets(content.agenda)),
+        (
+            "minutes_discussion",
+            [
+                "\n\n".join(
+                    f"### {_plain(topic.title)}\n\n" + "\n".join(_bullets(topic.points))
+                    for topic in content.topics
+                    if _plain(topic.title) and _bullets(topic.points)
+                )
+            ],
+        ),
+        (
+            "minutes_decisions",
+            [
+                f"- {d.statement} ({d.pr_url})"
+                if d.pr_url
+                else f"- {d.statement} ({t(language, 'minutes_decision_kept')})"
+                for d in retained
+            ],
+        ),
+        ("minutes_not_retained", [f"- {d.statement}" for d in dropped]),
+        (
+            "minutes_contradictions",
+            [
+                f"- {flag.statement} — {t(language, _VERDICTS.get(flag.verdict, 'minutes_contradicts'))} "
+                f"“{' '.join(flag.quote.split())}” (`{flag.anchor}`)"
+                for flag in flags
+            ],
+        ),
+        ("minutes_actions", _bullets(content.action_items)),
+        ("minutes_questions", _bullets(content.open_questions)),
+        (
+            "minutes_gaps",
+            [f"- {format_timestamp(start)} → {format_timestamp(end)}" for start, end in gaps],
+        ),
+    ]
+    return "\n\n".join(
+        f"## {t(language, key)}\n\n" + "\n".join(lines) for key, lines in sections if any(lines)
+    )
+
+
+_VERDICTS = {"already_rejected": "minutes_already_rejected"}
+
+
+def _plain(text: str) -> str:
+    """One line without the Markdown a model adds anyway: heading marks, bullets."""
+    return " ".join(text.split()).lstrip("#-*• ").strip()
+
+
+def _bullets(items: Sequence[str]) -> list[str]:
+    return [f"- {line}" for item in items if (line := _plain(item))]
 
 
 def build_minutes_change(

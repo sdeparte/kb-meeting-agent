@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from conftest import KB_FILES, commit_file
+from conftest import KB_FILES, commit_file, minutes_content
 
 from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE
 from kb_meeting_agent.llm.fake import FakeProvider
@@ -11,7 +11,7 @@ from kb_meeting_agent.transcription.base import TranscriptionResult
 from kb_meeting_agent.transcription.fake import FakeTranscriber
 from live.helpers import command, speak
 
-MINUTES = {"MinutesDraft": [{"title": "Weekly", "slug": "weekly", "body": "## Points"}]}
+MINUTES = {"MinutesContent": [minutes_content("Weekly", "weekly")]}
 
 
 class FailingPublisher(FakePublisher):
@@ -197,7 +197,7 @@ async def test_an_open_gap_is_counted_at_close(make_session):
     await session.on_event("disconnected", None)
     clock.now = 90_000
     await session.close()
-    assert "00:01:00 to 00:01:30" in strong.calls_for("MinutesDraft")[0][2]
+    assert "00:01:00 to 00:01:30" in strong.calls_for("MinutesContent")[0][2]
 
 
 async def test_second_pass_falls_back_to_live_lines_when_it_fails(make_session):
