@@ -115,6 +115,28 @@ class SearchIndex:
         top = sorted(scores, key=lambda chunk_id: scores[chunk_id], reverse=True)[:k]
         return [rows[chunk_id] for chunk_id in top]
 
+    def section(self, path: str, headings: tuple[str, ...], text: str) -> list[Chunk]:
+        """Every chunk of the section holding `text`, in page order: the chunks next to it with
+        the same headings, not another section of the page that happens to share them."""
+        key = json.dumps(list(headings), ensure_ascii=False)
+        found = self._db.execute(
+            "SELECT id FROM chunks WHERE path = ? AND headings = ? AND text = ? ORDER BY id",
+            (path, key, text),
+        ).fetchone()
+        if found is None:
+            return []
+        page = self._db.execute(
+            "SELECT id, headings FROM chunks WHERE path = ? ORDER BY id", (path,)
+        ).fetchall()
+        start = end = [chunk_id for chunk_id, _ in page].index(found[0])
+        while start > 0 and page[start - 1][1] == key:
+            start -= 1
+        while end + 1 < len(page) and page[end + 1][1] == key:
+            end += 1
+        ids = [chunk_id for chunk_id, _ in page[start : end + 1]]
+        rows = self._rows(ids)
+        return [rows[chunk_id] for chunk_id in ids]
+
     def _lexical(self, query: str, limit: int) -> list[int]:
         terms = re.findall(r"\w+", query)
         if not terms:
