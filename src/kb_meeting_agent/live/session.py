@@ -155,6 +155,7 @@ class MeetingSession:
             tc.max_no_speech_prob,
             min_voiced_seconds=tc.min_voiced_seconds,
             min_avg_logprob=tc.min_avg_logprob,
+            max_compression_ratio=tc.max_compression_ratio,
         )
 
     def _lang(self) -> str:

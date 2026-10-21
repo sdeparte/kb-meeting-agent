@@ -110,6 +110,7 @@ class TranscriptionConfig(_Strict):
     max_no_speech_prob: float = Field(0.6, ge=0, le=1)
     min_voiced_seconds: float = Field(0.2, ge=0)
     min_avg_logprob: float | None = -1.0
+    max_compression_ratio: float | None = Field(2.4, gt=0)
     vocabulary: list[str] = Field(default_factory=list)  # hinted to Whisper before the glossary
     vocabulary_max_chars: int = Field(600, ge=0)
 
