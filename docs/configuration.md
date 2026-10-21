@@ -16,7 +16,7 @@ agent:
 data_dir: ~/.local/share/kb-meeting-agent
 
 llm:
-  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b" }
+  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none", temperature: 0, max_tokens: 8192 } }
   strong:    { provider: anthropic, model: claude-opus-5-5, api_key: "${ANTHROPIC_API_KEY}", effort: high }
   embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
 
@@ -47,7 +47,7 @@ defaults:
 | `base_url` | `openai-compatible` only: the server's `/v1` URL |
 | `api_key` | API key; optional for local servers |
 | `effort` | `anthropic` only: `low`, `medium`, `high`, `xhigh` or `max` |
-| `request_options` | `openai-compatible` only: extra fields added to every request, as is. With Ollama, `{ reasoning_effort: "none" }` switches off the reasoning of models such as Qwen3, which otherwise thinks before every answer (about 20 s instead of under 1 s on a 16 GB Mac mini) |
+| `request_options` | `openai-compatible` only: extra fields added to every request, as is. With Ollama, `{ reasoning_effort: "none" }` switches off the reasoning of models such as Qwen3, which otherwise thinks before every answer (about 20 s instead of under 1 s on a 16 GB Mac mini). Set `temperature: 0`: servers otherwise sample (0.8 with Ollama), and the same question gets different answers (on qwen3:8b, "every mini-game in production" gave 11, then 3, then 2). Keep reasoning off with it on Qwen3, whose authors advise against temperature 0 while it reasons. OpenAI's reasoning models (o series, GPT-5) refuse temperature 0: leave it out there. Set `max_tokens` (e.g. `8192`) so that a model repeating itself fails instead of running on: Ollama's context shift never stops it; on vLLM, keep the prompt plus `max_tokens` within the model's context, or it rejects the request |
 | `refusal_fallback` | `anthropic` only: when the model declines a request, let the API retry it on a fallback model (default `false`) |
 
 `embedding` must be `openai-compatible` (or `fake`): Anthropic has no embeddings endpoint, and the configuration is rejected otherwise. Changing the embedding model rebuilds the index on the next run.

@@ -53,8 +53,8 @@ ollama pull bge-m3      # embedding (multilingual)
 
 ```yaml
 llm:
-  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none" } }
-  strong:    { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none" } }
+  fast:      { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none", temperature: 0, max_tokens: 8192 } }
+  strong:    { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "qwen3:14b", request_options: { reasoning_effort: "none", temperature: 0, max_tokens: 8192 } }
   embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
 ```
 
