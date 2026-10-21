@@ -123,3 +123,25 @@ async def test_write_minutes_mentions_gaps():
     )
     user = strong.calls_for("MinutesDraft")[0][2]
     assert "TRANSCRIPTION GAPS:\n- 00:05:00 to 00:06:10" in user
+
+
+async def test_write_minutes_integrates_the_agent_interactions():
+    strong = FakeProvider(
+        {
+            "SliceSummary": [{"summary": "s"}],
+            "MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}],
+        }
+    )
+    await write_minutes(
+        strong,
+        segments=[seg(0, "Alice", "hello")],
+        decisions=[],
+        flags=[],
+        instructions="",
+        language="fr",
+        agent_label="Breach (IA)",
+        interactions=[(65.0, "Alice asked Breach (IA): “Why?”; answer: “Because.”")],
+    )
+    _, system, user = strong.calls_for("MinutesDraft")[0]
+    assert "Breach (IA)" in system and "no separate section" in system
+    assert "INTERACTIONS WITH Breach (IA):\n- [00:01:05] Alice asked Breach (IA)" in user

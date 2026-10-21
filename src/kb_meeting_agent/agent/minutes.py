@@ -36,6 +36,7 @@ Factual, no invention, at most 250 words."""
 
 MINUTES_SYSTEM = """You write the detailed minutes of a meeting for a knowledge base, following the KB's conventions below.
 Use only the material provided: attribute each point to who said it and never add details, intents or interpretations the transcript does not state. The transcript is automatic: leave out isolated words that carry nothing (a lone "thank you", an unknown word) instead of narrating them. `body` is Markdown with level-2 headings for: participants, agenda (inferred), discussion (one sub-section per topic), decisions (link each validated decision to its pull request URL), decisions proposed but not retained, contradictions with the KB that were raised, action items (with owner when stated), open questions, transcription gaps. Omit a section only when it has no content.
+The meeting has an AI assistant, {agent}. Integrate the interactions with it where they belong (who asked it what, what it answered or pointed out, which of its proposals were validated or dismissed), always naming it {agent}; no separate section.
 `title` is short; `slug` is kebab-case ASCII. Write in language "{language}".
 
 KB CONVENTIONS:
@@ -52,6 +53,8 @@ async def write_minutes(
     language: str,
     slice_seconds: float = 600,
     gaps: Sequence[tuple[float, float]] = (),
+    agent_label: str = "the assistant",
+    interactions: Sequence[tuple[float, str]] = (),
 ) -> MinutesDraft:
     summaries: list[str] = []
     for slice_index, part in groupby(segments, key=lambda s: int(s.start // slice_seconds)):
@@ -79,9 +82,13 @@ async def write_minutes(
         f"PART SUMMARIES:\n" + "\n\n".join(summaries) + "\n\n"
         "DECISIONS:\n" + ("\n".join(decision_lines) or "(none)") + "\n\n"
         "KB CONTRADICTIONS RAISED:\n" + ("\n".join(flag_lines) or "(none)") + "\n\n"
-        "TRANSCRIPTION GAPS:\n" + ("\n".join(gap_lines) or "(none)")
+        "TRANSCRIPTION GAPS:\n" + ("\n".join(gap_lines) or "(none)") + "\n\n"
+        f"INTERACTIONS WITH {agent_label}:\n"
+        + ("\n".join(f"- [{format_timestamp(at)}] {line}" for at, line in interactions) or "(none)")
     )
-    system = MINUTES_SYSTEM.format(language=language, instructions=instructions or "(none)")
+    system = MINUTES_SYSTEM.format(
+        language=language, instructions=instructions or "(none)", agent=agent_label
+    )
     return await complete(strong, system, user, MinutesDraft)
 
 

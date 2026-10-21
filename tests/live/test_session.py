@@ -4,6 +4,7 @@ import json
 from kb_meeting_agent.live.audio import BYTES_PER_MS
 from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.fake import FakeProvider
+from kb_meeting_agent.transcription.fake import FakeTranscriber
 from live.helpers import command, speak
 
 
@@ -234,3 +235,20 @@ async def test_a_restarted_connector_gets_the_edit_modals_back(make_session):
     )
     await session.on_event("connected", {"type": "hello"})
     assert len(link.of("modals")) == 1  # nothing left to give back
+
+
+async def test_the_notice_and_the_whisper_hint_carry_the_agent_name(make_session):
+    live = FakeTranscriber(default="bonjour")
+    session, link, *_ = make_session(live=live)
+    await start(session)
+    assert "Scribe" in link.texts()[0]
+    await speak(session)
+    await session.settle()
+    assert live.calls[0][2].startswith("Scribe")
+
+
+async def test_the_level_chosen_at_start_is_recorded_with_who_chose_it(make_session):
+    session, *_ = make_session()
+    await start(session, level="silent")
+    [interaction] = session.meeting.agent.interactions
+    assert interaction.text == "Alice set Scribe (AI) to the silent level"

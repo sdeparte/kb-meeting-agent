@@ -7,7 +7,8 @@ def test_replay_dry_run_writes_minutes(tmp_path, kb_origin, capsys):
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
-agent_names: [scribe]
+agent:
+  name: Scribe
 data_dir: {tmp_path / "data"}
 llm:
   fast: {{provider: fake, model: fake}}

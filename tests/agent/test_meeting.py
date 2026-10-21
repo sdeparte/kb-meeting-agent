@@ -71,7 +71,7 @@ def make_agent(kb, tmp_path):
             sink=sink,
             transcript=Transcript(tmp_path / "meeting" / "transcript.jsonl"),
             settings=AgentSettings(
-                agent_names=["scribe"], meeting_date=date(2026, 10, 15), **settings
+                agent_name="Scribe", meeting_date=date(2026, 10, 15), **settings
             ),
         )
         return agent, fast, strong, publisher, sink
@@ -532,3 +532,105 @@ async def test_refresh_leaves_a_branch_changed_by_someone_else(make_agent, kb, k
     await agent.refresh_decision_prs()
     assert publisher.updates == []
     assert "changed by someone else" in sink.texts()[-1]
+
+
+def lines(agent):
+    return [interaction.text for interaction in agent.interactions]
+
+
+async def test_a_spoken_question_and_its_answer_are_recorded(make_agent):
+    fast = FakeProvider(
+        {
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"]}],
+        }
+    )
+    strong = FakeProvider(
+        {
+            "Answer": [
+                {
+                    "covered": True,
+                    "answer": "45 s.",
+                    "sources": ["reference/configuration.md#Neutralization"],
+                }
+            ]
+        }
+    )
+    agent, *_ = make_agent(fast, strong, extraction_interval_s=1000)
+    await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
+    [line] = lines(agent)
+    assert line.startswith("Alice asked Scribe (AI): “What is the cooldown?”")
+    assert "45 s." in line
+    assert agent.interactions[0].at == 31.0
+
+
+async def test_slash_questions_and_level_changes_are_recorded(make_agent):
+    agent, *_ = make_agent(extraction_interval_s=1000)
+    await agent.on_segment(seg(0, "hello"))
+    await agent.ask("What is the cooldown?", user="Bob")
+    await agent.set_level("silent", announce=False, user="Carol")
+    assert lines(agent)[0].startswith("Bob asked Scribe (AI): “What is the cooldown?”")
+    assert lines(agent)[1] == "Carol set Scribe (AI) to the silent level"
+
+
+async def test_contradictions_and_decisions_are_recorded(make_agent):
+    claim = {"subject": "cooldown", "statement": "The cooldown is 30 seconds"}
+    fast = FakeProvider(
+        {
+            "Extraction": [
+                extraction(
+                    claims=[claim], decisions=[DECISION, {"statement": "Drop BLE", "quote": "q"}]
+                )
+            ]
+        }
+    )
+    strong = FakeProvider({"Verdict": [VERDICT], "DecisionDraft": [DRAFT]})
+    agent, *_ = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    await agent.on_button("decision:d2:ignore", "Carol")
+    recorded = lines(agent)
+    assert "Scribe (AI) proposed the decision “Cooldown is 30 seconds”" in recorded
+    assert any(
+        r.startswith("Scribe (AI) pointed out that “The cooldown is 30 seconds” contradicts the KB")
+        for r in recorded
+    )
+    assert (
+        "Bob validated the decision “Cooldown is 30 seconds” (https://example.test/pull/1)"
+        in recorded
+    )
+    assert "Carol dismissed the decision “Drop BLE”" in recorded
+
+
+async def test_a_reworded_decision_keeps_its_first_wording(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, *_ = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_modal("decision:d1:edit", "Cooldown is 45 seconds", "Bob")
+    assert (
+        "Bob reworded the decision “Cooldown is 30 seconds” as “Cooldown is 45 seconds”"
+        in lines(agent)
+    )
+
+
+async def test_the_minutes_receive_the_interactions(make_agent):
+    strong = FakeProvider({"MinutesDraft": [{"title": "W", "slug": "w", "body": "x"}]})
+    agent, _, strong, *_ = make_agent(strong=strong, extraction_interval_s=1000)
+    await agent.on_segment(seg(0, "hello"))
+    await agent.ask("What is the cooldown?", user="Bob")
+    await agent.end()
+    _, system, user = strong.calls_for("MinutesDraft")[0]
+    assert "Scribe (AI)" in system
+    assert "INTERACTIONS WITH Scribe (AI):\n- [00:00:31] Bob asked Scribe (AI)" in user
+
+
+async def test_interactions_survive_a_snapshot(make_agent):
+    agent, *_ = make_agent(extraction_interval_s=1000)
+    await agent.on_segment(seg(0, "hello"))
+    await agent.ask("Why?", user="Bob")
+    clone, *_ = make_agent()
+    clone.restore(json.loads(json.dumps(agent.snapshot())))
+    assert lines(clone) == lines(agent)
