@@ -63,5 +63,20 @@ async def test_section_returns_every_chunk_of_a_section_in_page_order(index):
         "h",
         [chunk("a.md", "rows 1-7"), chunk("a.md", "rows 8-11"), chunk("a.md", "other", "I")],
     )
-    assert [c.text for c in index.section("a.md", ("H",))] == ["rows 1-7", "rows 8-11"]
-    assert index.section("a.md", ("Missing",)) == []
+    assert [c.text for c in index.section("a.md", ("H",), "rows 8-11")] == [
+        "rows 1-7",
+        "rows 8-11",
+    ]
+    assert index.section("a.md", ("Missing",), "rows 1-7") == []
+
+
+async def test_section_leaves_out_another_section_with_the_same_headings(index):
+    notes = [chunk("a.md", "notes 1", "Notes"), chunk("a.md", "notes 2", "Notes")]
+    await index.upsert_file(
+        "a.md", "h", [*notes, chunk("a.md", "rows", "Table"), chunk("a.md", "notes 3", "Notes")]
+    )
+    assert [c.text for c in index.section("a.md", ("Notes",), "notes 2")] == [
+        "notes 1",
+        "notes 2",
+    ]
+    assert [c.text for c in index.section("a.md", ("Notes",), "notes 3")] == ["notes 3"]
