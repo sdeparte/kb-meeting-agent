@@ -215,6 +215,39 @@ async def test_a_validation_is_announced_and_its_result_answers_it(make_agent):
     assert len(sink.messages) == proposal + 2
 
 
+async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
+    fast = FakeProvider(
+        {
+            "Extraction": [extraction(decisions=[DECISION])],
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"]}],
+        }
+    )
+    strong = FakeProvider(
+        {"Answer": [LLMError("timeout")], "DecisionDraft": [LLMUnavailable("down"), DRAFT]}
+    )
+    agent, *_, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_segment(seg(1, "Scribe, what is the cooldown?"))
+    announcement, failed = sink.messages[-2:]
+    assert announcement.text.startswith("🔎")
+    assert failed.text.startswith("Interrupted: the model did not answer")
+    assert failed.reply_to == str(len(sink.messages) - 1)  # the announcement's id
+    await agent.on_button("decision:d1:validate", "Bob")
+    announcement, failed, paused = sink.messages[-3:]
+    assert announcement.text.startswith("✍️")
+    assert failed.text.startswith("Interrupted")
+    assert failed.reply_to == str(len(sink.messages) - 2)
+    assert paused.text.startswith("Checks paused") and paused.reply_to is None
+    await agent.on_button("decision:d1:validate", "Bob")  # still pending: it can be retried
+    assert sink.texts()[-2:] == [
+        "Decision validated by Bob: https://example.test/pull/1",
+        "Checks resumed.",
+    ]
+
+
 async def test_voice_commands(make_agent):
     fast = FakeProvider(
         {
