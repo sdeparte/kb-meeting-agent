@@ -661,8 +661,9 @@ class MeetingSession:
         )
         # The agent's name first, so that Whisper spells it right when people call it. Not
         # its aliases: they are often misspellings, which the hint would teach Whisper.
+        # The whole glossary: the hint keeps its own length, and a cut page would stop it at "C".
         prompt = vocabulary_prompt(
-            kb.glossary(),
+            kb.glossary(max_chars=None),
             self._transcription.vocabulary_max_chars,
             first=[self.deps.config.agent.name, *self._transcription.vocabulary],
         )

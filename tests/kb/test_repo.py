@@ -107,3 +107,11 @@ async def test_truncated_or_missing_instructions_are_logged(kb, kb_origin, monke
     await kb.sync()
     kb.instructions()
     assert "instruction files not found: gone.md" in caplog.text
+
+
+async def test_the_glossary_is_cut_unless_asked_whole(kb, kb_origin):
+    rows = "".join(f"| TERM-{i:03d} | `t{i}` |\n" for i in range(300))
+    commit_file(kb_origin, "reference/glossary.md", "| In-game | Code |\n|---|---|\n" + rows)
+    await kb.sync()
+    assert len(kb.glossary()) == repo.GLOSSARY_MAX_CHARS
+    assert "TERM-299" in kb.glossary(max_chars=None)
