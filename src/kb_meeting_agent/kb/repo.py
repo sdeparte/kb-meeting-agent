@@ -76,9 +76,9 @@ class GitMarkdownKnowledgeBase:
         folder = self._resolve(directory)
         return [p.name for p in folder.iterdir() if p.is_file()] if folder.is_dir() else []
 
-    def glossary(self) -> str:
+    def glossary(self, max_chars: int | None = GLOSSARY_MAX_CHARS) -> str:
         path = self._conventions.glossary
-        return self.read(path)[:GLOSSARY_MAX_CHARS] if path and self.exists(path) else ""
+        return self.read(path)[:max_chars] if path and self.exists(path) else ""
 
     def instructions(self) -> str:
         """The instruction files, cut at INSTRUCTIONS_MAX_CHARS in total (a warning says so)."""
