@@ -34,5 +34,5 @@ defaults:
 #
 # transcription:
 #   language: fr
-#   live:  { provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo }
+#   live:  { provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo, temperature_fallback: false }
 #   final: { provider: mlx-whisper, model: mlx-community/whisper-large-v3-mlx }

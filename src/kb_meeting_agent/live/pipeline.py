@@ -67,7 +67,7 @@ class TranscriptionPipeline:
                         language=self._language,
                         prompt=self._prompt,
                     )
-                    if self._cleaner.audible(audio)
+                    if self._cleaner.audible(audio, utterance.duration_s)
                     else None
                 )
             except Exception:
