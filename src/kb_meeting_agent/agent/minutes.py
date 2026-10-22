@@ -53,7 +53,7 @@ SLICE_SYSTEM = """Summarize this part of a meeting transcript in language "{lang
 {people}
 Factual, no invention, at most 250 words."""
 
-MINUTES_SYSTEM = """You write the detailed minutes of a meeting for a knowledge base, following the KB's conventions below.
+MINUTES_SYSTEM = """You write the detailed minutes of a meeting for a knowledge base. The sections, their headings and their order are fixed by the fields below: follow the KB's conventions below for the content and the style only.
 Use only the material provided: attribute each point to who said it and never add details, intents or interpretations the transcript does not state. The transcript is automatic: leave out isolated words that carry nothing (a lone "thank you", an unknown word) instead of narrating them.
 {people}
 Fill the fields; the decisions, the KB contradictions and the transcription gaps are listed apart from them, so do not repeat them as such:

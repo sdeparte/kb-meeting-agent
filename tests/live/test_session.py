@@ -251,7 +251,7 @@ async def test_the_level_chosen_at_start_is_recorded_with_who_chose_it(make_sess
     session, *_ = make_session()
     await start(session, level="silent")
     [interaction] = session.meeting.agent.interactions
-    assert interaction.text == "Alice set Scribe (AI) to the silent level"
+    assert interaction.text == "Alice set Scribe (AI) to the `silent` level"
 
 
 async def test_the_whisper_hint_leaves_out_the_aliases_and_adds_the_vocabulary(make_session):

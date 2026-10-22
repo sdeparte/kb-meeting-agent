@@ -208,3 +208,19 @@ async def test_the_summaries_name_the_assistant_and_leave_out_nicknames():
         strong.calls_for("MinutesContent")[0][1],
     ):
         assert "the AI assistant Otis (IA)" in system and "nickname" in system
+
+
+async def test_the_kb_conventions_shape_the_content_not_the_sections():
+    strong = FakeProvider(
+        {"SliceSummary": [{"summary": "s"}], "MinutesContent": [minutes_content("W", "w")]}
+    )
+    await write_minutes(
+        strong,
+        segments=[seg(0, "Alice", "hello")],
+        decisions=[],
+        flags=[],
+        instructions="Add a Risks section.",
+        language="fr",
+    )
+    system = strong.calls_for("MinutesContent")[0][1]
+    assert "fixed by the fields below" in system and "content and the style only" in system
