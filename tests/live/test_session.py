@@ -3,9 +3,11 @@ import json
 
 from kb_meeting_agent.live.audio import BYTES_PER_MS
 from kb_meeting_agent.live.protocol import AudioFrame
+from kb_meeting_agent.live.session import ConnectorSink
 from kb_meeting_agent.llm.fake import FakeProvider
+from kb_meeting_agent.ports import OutMessage
 from kb_meeting_agent.transcription.fake import FakeTranscriber
-from live.helpers import command, speak
+from live.helpers import FakeLink, command, speak
 
 
 async def start(session, **options):
@@ -287,3 +289,10 @@ async def test_the_answer_to_a_spoken_question_replies_to_its_announcement(make_
     assert announcement["text"].startswith("🔎")
     assert "reply_to" not in announcement
     assert answer["reply_to"] == announcement["request_id"]
+
+
+async def test_each_meeting_gives_its_messages_ids_of_its_own():
+    # the connector keeps the ids across meetings: a reply must not find an older meeting's
+    link = FakeLink()
+    first, second = ConnectorSink(link, "t1"), ConnectorSink(link, "t2")
+    assert await first.send(OutMessage("a")) != await second.send(OutMessage("b"))

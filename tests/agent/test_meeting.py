@@ -215,6 +215,28 @@ async def test_a_validation_is_announced_and_its_result_answers_it(make_agent):
     assert len(sink.messages) == proposal + 2
 
 
+async def test_an_announcement_is_answered_whatever_the_failure(make_agent, monkeypatch):
+    fast = FakeProvider(
+        {
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"]}],
+        }
+    )
+    agent, *_, sink = make_agent(fast, extraction_interval_s=1000)
+
+    async def broken(*args, **kwargs):
+        raise OSError("index unreadable")
+
+    monkeypatch.setattr(agent.kb, "search", broken)
+    with pytest.raises(OSError):
+        await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
+    announcement, failed = sink.messages
+    assert failed.text == "Interrupted by an error (the agent's log has the details)."
+    assert failed.reply_to == "1"
+
+
 async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
     fast = FakeProvider(
         {
