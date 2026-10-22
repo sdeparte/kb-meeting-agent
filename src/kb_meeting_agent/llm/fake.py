@@ -43,10 +43,13 @@ FAKE_DEFAULTS: dict[str, object] = {
         "related_pages": [],
     },
     "SliceSummary": {"summary": ""},
-    "MinutesDraft": {
+    "MinutesContent": {
         "title": "Replay",
         "slug": "replay",
-        "body": "## Discussion\n\n(fake provider)",
+        "agenda": [],
+        "topics": [{"title": "Discussion", "points": ["(fake provider)"]}],
+        "action_items": [],
+        "open_questions": [],
     },
 }
 

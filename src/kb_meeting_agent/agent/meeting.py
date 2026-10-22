@@ -142,7 +142,9 @@ class MeetingAgent:
         """The agent's name as participants and the minutes see it, e.g. "Breach (AI)"."""
         return t(self._lang, "agent_label", name=self.settings.agent_name)
 
-    def _record(self, text: str) -> None:
+    def _record(self, key: str, **values: object) -> None:
+        """Keep an exchange for the minutes, in the KB's language: the minutes model copies it."""
+        text = t(self._lang, f"record_{key}", agent=self._label, **values)
         self.interactions.append(Interaction(self._latest_end, text))
 
     async def _say(self, text: str, buttons: tuple[Button, ...] = ()) -> None:
@@ -239,7 +241,7 @@ class MeetingAgent:
         self.decisions[decision_id] = PendingDecision(
             decision_id, candidate.statement, matched or tuple(new), anchored=bool(matched)
         )
-        self._record(f"{self._label} proposed the decision “{candidate.statement}”")
+        self._record("proposed", statement=candidate.statement)
         edit = Modal(
             title=t(self._lang, "edit_title"),
             label=t(self._lang, "edit_label"),
@@ -273,9 +275,10 @@ class MeetingAgent:
         self._flagged_lines.add((flag.anchor, flag.quote))
         self.flags.append(flag)
         self._record(
-            f"{self._label} pointed out that “{flag.statement}” "
-            f"{'was already rejected in' if flag.verdict == 'already_rejected' else 'contradicts'} "
-            f"the KB: “{_one_line(flag.quote)}” ({flag.anchor})"
+            "already_rejected" if flag.verdict == "already_rejected" else "contradiction",
+            statement=flag.statement,
+            quote=_one_line(flag.quote),
+            anchor=flag.anchor,
         )
         key = "already_rejected" if flag.verdict == "already_rejected" else "contradiction"
         text = t(self._lang, key, quote=flag.quote, anchor=flag.anchor, reason=flag.reason)
@@ -290,7 +293,7 @@ class MeetingAgent:
         results = await self.kb.search(topic, k=1)
         if results:
             self._last_context_at = now
-            self._record(f"{self._label} pointed to the KB page {results[0].anchor}")
+            self._record("context", anchor=results[0].anchor)
             await self._say(t(self._lang, "context", anchor=results[0].anchor))
 
     async def _handle_addressed(self, segment: Segment) -> None:
@@ -339,7 +342,7 @@ class MeetingAgent:
         if level not in LEVELS:
             return
         self.level = level
-        self._record(f"{user or 'Someone'} set {self._label} to the {level} level")
+        self._record("level", user=user or t(self._lang, "someone"), level=level)
         if announce:
             await self._say(t(self._lang, "level_changed", level=level))
 
@@ -357,18 +360,16 @@ class MeetingAgent:
         except LLMError as exc:
             log.warning("answering failed: %s", exc)
             return t(self._lang, "checks_paused")
-        self._record_answer(user or "Someone", question, text)
+        self._record_answer(user or t(self._lang, "someone"), question, text)
         return text
 
     def _record_answer(self, user: str, question: str, answer: str) -> None:
-        self._record(
-            f"{user} asked {self._label}: “{_one_line(question)}”; answer: “{_one_line(answer)}”"
-        )
+        self._record("answer", user=user, question=_one_line(question), answer=_one_line(answer))
 
     async def edit_decision(self, decision_id: str, statement: str, user: str) -> None:
         decision = self.decisions.get(decision_id)
         if decision and decision.state == "pending":
-            self._record(f"{user} reworded the decision “{decision.statement}” as “{statement}”")
+            self._record("reworded", user=user, before=decision.statement, after=statement)
             decision.statement = statement
             await self.validate_decision(decision_id, user)
 
@@ -381,7 +382,7 @@ class MeetingAgent:
         decision = self.decisions.get(decision_id)
         if decision and decision.state == "pending":
             decision.state = "ignored"
-            self._record(f"{user} dismissed the decision “{decision.statement}”")
+            self._record("dismissed", user=user, statement=decision.statement)
             await self._say(t(self._lang, "decision_ignored", user=user))
 
     async def _validate(self, decision: PendingDecision, user: str) -> None:
@@ -421,17 +422,14 @@ class MeetingAgent:
         pr = await self._open_pr(change)
         if isinstance(pr, Path):
             decision.state = "kept"
-            self._record(
-                f"{user} validated the decision “{decision.statement}” "
-                "(publication failed, kept locally)"
-            )
+            self._record("validated_kept", user=user, statement=decision.statement)
             return
         if pr is None:
             return
         if number is not None:
             self._reserved_numbers.add(number)
         decision.state, decision.pr = "validated", pr
-        self._record(f"{user} validated the decision “{decision.statement}” ({pr.url})")
+        self._record("validated", user=user, statement=decision.statement, url=pr.url)
         decision.publication = {
             "draft": draft.model_dump(),
             "number": number,

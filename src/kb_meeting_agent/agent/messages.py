@@ -88,6 +88,34 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "no_related_pages": "None identified.",
         "minutes_pr_title": "Minutes: {title}",
         "minutes_pr_body": "Minutes of the meeting of {date}. Participants: {participants}.",
+        "someone": "Someone",
+        "record_proposed": "{agent} proposed the decision “{statement}”",
+        "record_contradiction": "{agent} pointed out that “{statement}” contradicts the KB: “{quote}” ({anchor})",
+        "record_already_rejected": (
+            "{agent} pointed out that “{statement}” was already rejected in the KB: “{quote}” ({anchor})"
+        ),
+        "record_context": "{agent} pointed to the KB page {anchor}",
+        "record_answer": "{user} asked {agent}: “{question}”; answer: “{answer}”",
+        "record_level": "{user} set {agent} to the `{level}` level",
+        "record_reworded": "{user} reworded the decision “{before}” as “{after}”",
+        "record_dismissed": "{user} dismissed the decision “{statement}”",
+        "record_validated": "{user} validated the decision “{statement}” ({url})",
+        "record_validated_kept": (
+            "{user} validated the decision “{statement}” (publication failed, kept locally)"
+        ),
+        "minutes_participants": "Participants",
+        "minutes_agenda": "Agenda",
+        "minutes_discussion": "Discussion",
+        "minutes_decisions": "Decisions",
+        "minutes_decision_kept": "validated, pull request not published yet",
+        "minutes_pending": "Decisions awaiting validation",
+        "minutes_not_retained": "Decisions proposed but not retained",
+        "minutes_contradictions": "Contradictions with the KB",
+        "minutes_contradicts": "the KB says",
+        "minutes_already_rejected": "already rejected in the KB",
+        "minutes_actions": "Action items",
+        "minutes_questions": "Open questions",
+        "minutes_gaps": "Transcription gaps",
     },
     "fr": {
         "answer": "{answer}\n\nSources : {sources}",
@@ -181,6 +209,36 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "no_related_pages": "Aucune identifiée.",
         "minutes_pr_title": "Compte rendu : {title}",
         "minutes_pr_body": "Compte rendu de la réunion du {date}. Participants : {participants}.",
+        "someone": "Quelqu'un",
+        "record_proposed": "{agent} a proposé la décision « {statement} »",
+        "record_contradiction": (
+            "{agent} a signalé que « {statement} » contredit la KB : « {quote} » ({anchor})"
+        ),
+        "record_already_rejected": (
+            "{agent} a signalé que « {statement} » a déjà été écarté dans la KB : « {quote} » ({anchor})"
+        ),
+        "record_context": "{agent} a indiqué la page de la KB {anchor}",
+        "record_answer": "{user} a demandé à {agent} : « {question} » ; réponse : « {answer} »",
+        "record_level": "{user} a réglé {agent} sur le niveau `{level}`",
+        "record_reworded": "{user} a reformulé la décision « {before} » en « {after} »",
+        "record_dismissed": "{user} a écarté la décision « {statement} »",
+        "record_validated": "{user} a validé la décision « {statement} » ({url})",
+        "record_validated_kept": (
+            "{user} a validé la décision « {statement} » (publication échouée, gardée en local)"
+        ),
+        "minutes_participants": "Participants",
+        "minutes_agenda": "Ordre du jour",
+        "minutes_discussion": "Discussion",
+        "minutes_decisions": "Décisions",
+        "minutes_decision_kept": "validée, pull request pas encore publiée",
+        "minutes_pending": "Décisions en attente de validation",
+        "minutes_not_retained": "Décisions proposées non retenues",
+        "minutes_contradictions": "Contradictions avec la KB",
+        "minutes_contradicts": "la KB dit",
+        "minutes_already_rejected": "déjà écarté dans la KB",
+        "minutes_actions": "Actions",
+        "minutes_questions": "Questions ouvertes",
+        "minutes_gaps": "Trous de transcription",
     },
 }
 
