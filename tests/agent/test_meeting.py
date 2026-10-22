@@ -193,7 +193,81 @@ async def test_addressed_question_is_answered(make_agent):
     )
     agent, *_, sink = make_agent(fast, strong, extraction_interval_s=1000)
     await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
-    assert sink.texts()[0].startswith("45 s.")
+    announcement, answer = sink.messages
+    assert announcement.text == "🔎 Searching the KB: “What is the cooldown?”"
+    assert announcement.reply_to is None
+    assert answer.text.startswith("45 s.")
+    assert answer.reply_to == "1"  # the id the sink gave the announcement
+
+
+async def test_a_validation_is_announced_and_its_result_answers_it(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, *_, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    proposal = len(sink.messages)
+    await agent.on_button("decision:d1:validate", "Bob")
+    announcement, published = sink.messages[proposal:]
+    assert announcement.text.startswith("✍️ Bob validated “Cooldown is 30 seconds”")
+    assert published.text == "Decision validated by Bob: https://example.test/pull/1"
+    assert published.reply_to == str(proposal + 1)
+    await agent.on_button("decision:d1:validate", "Bob")  # already validated: nothing to do
+    assert len(sink.messages) == proposal + 2
+
+
+async def test_an_announcement_is_answered_whatever_the_failure(make_agent, monkeypatch):
+    fast = FakeProvider(
+        {
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"]}],
+        }
+    )
+    agent, *_, sink = make_agent(fast, extraction_interval_s=1000)
+
+    async def broken(*args, **kwargs):
+        raise OSError("index unreadable")
+
+    monkeypatch.setattr(agent.kb, "search", broken)
+    with pytest.raises(OSError):
+        await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
+    announcement, failed = sink.messages
+    assert failed.text == "Interrupted by an error (the agent's log has the details)."
+    assert failed.reply_to == "1"
+
+
+async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
+    fast = FakeProvider(
+        {
+            "Extraction": [extraction(decisions=[DECISION])],
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"]}],
+        }
+    )
+    strong = FakeProvider(
+        {"Answer": [LLMError("timeout")], "DecisionDraft": [LLMUnavailable("down"), DRAFT]}
+    )
+    agent, *_, sink = make_agent(fast, strong)
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_segment(seg(1, "Scribe, what is the cooldown?"))
+    announcement, failed = sink.messages[-2:]
+    assert announcement.text.startswith("🔎")
+    assert failed.text.startswith("Interrupted: the model did not answer")
+    assert failed.reply_to == str(len(sink.messages) - 1)  # the announcement's id
+    await agent.on_button("decision:d1:validate", "Bob")
+    announcement, failed, paused = sink.messages[-3:]
+    assert announcement.text.startswith("✍️")
+    assert failed.text.startswith("Interrupted")
+    assert failed.reply_to == str(len(sink.messages) - 2)
+    assert paused.text.startswith("Checks paused") and paused.reply_to is None
+    await agent.on_button("decision:d1:validate", "Bob")  # still pending: it can be retried
+    assert sink.texts()[-2:] == [
+        "Decision validated by Bob: https://example.test/pull/1",
+        "Checks resumed.",
+    ]
 
 
 async def test_voice_commands(make_agent):

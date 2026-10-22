@@ -27,6 +27,8 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 let core = null; // opened once logged in to Discord, so a join is never handled too early
 const interactions = new Map(); // interaction id -> deferred interaction awaiting a reply
 const modals = new Map(); // button custom id -> modal descriptor
+const sentIds = new Map(); // core request id -> Discord message id, so a message can answer it
+const SENT_IDS_KEPT = 200;
 const optedOut = new Set();
 const stats = { decrypt_errors: 0, users: new Map() };
 let voice = null; // { connection, channel, textChannelId, tracker, subscribed }
@@ -197,11 +199,16 @@ async function handleCore(msg) {
     leaveVoice();
   } else if (msg.type === "send") {
     const channel = await client.channels.fetch(msg.channel_id ?? voice?.textChannelId);
+    const repliedTo = msg.reply_to && sentIds.get(msg.reply_to);
     const sent = await channel.send({
       content: truncate(msg.text),
       components: components(msg.buttons),
-      allowedMentions: { parse: [] }, // never ping anyone from a transcript or a KB quote
+      // never ping anyone from a transcript or a KB quote
+      allowedMentions: { parse: [], repliedUser: false },
+      // an answer to the agent's own announcement; posted alone if that one is unknown
+      ...(repliedTo ? { reply: { messageReference: repliedTo, failIfNotExists: false } } : {}),
     });
+    remember(msg.request_id, sent.id);
     send("sent", { request_id: msg.request_id, message_id: sent.id });
   } else if (msg.type === "reply") {
     const interaction = interactions.get(msg.interaction_id);
@@ -214,6 +221,11 @@ async function handleCore(msg) {
     // After a restart: the Edit modals of messages posted by the previous process.
     for (const { id, modal } of msg.modals ?? []) modals.set(id, modal);
   }
+}
+
+function remember(requestId, messageId) {
+  sentIds.set(requestId, messageId); // unique across meetings: the core prefixes them
+  if (sentIds.size > SENT_IDS_KEPT) sentIds.delete(sentIds.keys().next().value);
 }
 
 // Once a decision is validated, edited or ignored, its Edit modal is no longer needed.

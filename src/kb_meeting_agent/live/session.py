@@ -48,6 +48,9 @@ class ConnectorSink:
     def __init__(self, link: ConnectorPort, channel_id: str) -> None:
         self._link = link
         self._channel_id = channel_id
+        # The connector keeps the ids of the messages it posted across meetings: a prefix of
+        # this sink's own, so an answer never replies to another meeting's message.
+        self._prefix = uuid.uuid4().hex[:6]
         self._count = 0
         # The connector opens a button's modal itself, from memory: kept here too, so a
         # restarted connector can be given them again (see resend_modals).
@@ -55,7 +58,7 @@ class ConnectorSink:
 
     async def send(self, message: OutMessage) -> str:
         self._count += 1
-        request_id = f"m{self._count}"
+        request_id = f"{self._prefix}-m{self._count}"
         buttons = [
             {"id": b.id, "label": b.label, **({"modal": asdict(b.modal)} if b.modal else {})}
             for b in message.buttons
@@ -67,6 +70,7 @@ class ConnectorSink:
             channel_id=self._channel_id,
             text=message.text,
             buttons=buttons,
+            **({"reply_to": message.reply_to} if message.reply_to else {}),
         )
         return request_id
 
