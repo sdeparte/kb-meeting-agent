@@ -53,15 +53,28 @@ async def test_classify_addressed():
         {"AddressedIntent": [{"kind": "set_level", "question": "", "level": "silent"}]}
     )
     intent = await classify_addressed(
-        llm, names=["scribe"], context="...", utterance="scribe, mode silencieux", language="fr"
+        llm,
+        names=["scribe"],
+        context="...",
+        utterance="scribe, mode silencieux",
+        level="context",
+        previous_level="silent",
+        default_level="contradictions",
+        language="fr",
     )
     assert intent.kind == "set_level" and intent.level == "silent"
     assert "scribe" in llm.calls[0][1]
+    # the levels resolve "as before" and "back to the default"
+    assert "YOUR LEVEL: context (previous: silent, default: contradictions)" in llm.calls[0][2]
+    assert '"back to the default" -> set_level contradictions' in llm.calls[0][1]
+    assert '"as before" -> set_level silent' in llm.calls[0][1]
 
 
 async def test_classify_addressed_restates_the_question_in_the_kb_language():
     llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
-    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?", language="fr")
+    await classify_addressed(
+        llm, names=["Breach"], context="", utterance="Breach ?", **LEVELS, language="fr"
+    )
     assert 'in language "fr", in `question`' in llm.calls[0][1]
 
 
@@ -86,15 +99,24 @@ def test_is_addressed_ignores_accents_and_case(text, expected):
     assert is_addressed(text, ["Breach", "brèche"]) is expected
 
 
+LEVELS = {
+    "level": "contradictions",
+    "previous_level": "contradictions",
+    "default_level": "contradictions",
+}
+
+
 async def test_classify_addressed_names_the_agent():
     llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
     await classify_addressed(
-        llm, names=["Breach", "brèche"], context="", utterance="Breach ?", language="en"
+        llm, names=["Breach", "brèche"], context="", utterance="Breach ?", **LEVELS, language="en"
     )
     assert "You are Breach" in llm.calls[0][1] and "brèche" in llm.calls[0][1]
 
 
 async def test_classify_addressed_without_aliases_names_the_agent_once():
     llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
-    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?", language="en")
+    await classify_addressed(
+        llm, names=["Breach"], context="", utterance="Breach ?", **LEVELS, language="en"
+    )
     assert "may also call you" not in llm.calls[0][1]
