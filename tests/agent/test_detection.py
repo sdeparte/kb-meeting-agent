@@ -53,10 +53,16 @@ async def test_classify_addressed():
         {"AddressedIntent": [{"kind": "set_level", "question": "", "level": "silent"}]}
     )
     intent = await classify_addressed(
-        llm, names=["scribe"], context="...", utterance="scribe, mode silencieux"
+        llm, names=["scribe"], context="...", utterance="scribe, mode silencieux", language="fr"
     )
     assert intent.kind == "set_level" and intent.level == "silent"
     assert "scribe" in llm.calls[0][1]
+
+
+async def test_classify_addressed_restates_the_question_in_the_kb_language():
+    llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
+    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?", language="fr")
+    assert 'in language "fr", in `question`' in llm.calls[0][1]
 
 
 async def test_update_summary():
@@ -82,11 +88,13 @@ def test_is_addressed_ignores_accents_and_case(text, expected):
 
 async def test_classify_addressed_names_the_agent():
     llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
-    await classify_addressed(llm, names=["Breach", "brèche"], context="", utterance="Breach ?")
+    await classify_addressed(
+        llm, names=["Breach", "brèche"], context="", utterance="Breach ?", language="en"
+    )
     assert "You are Breach" in llm.calls[0][1] and "brèche" in llm.calls[0][1]
 
 
 async def test_classify_addressed_without_aliases_names_the_agent_once():
     llm = FakeProvider({"AddressedIntent": [{"kind": "other", "question": "", "level": "none"}]})
-    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?")
+    await classify_addressed(llm, names=["Breach"], context="", utterance="Breach ?", language="en")
     assert "may also call you" not in llm.calls[0][1]
