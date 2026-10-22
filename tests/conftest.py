@@ -64,6 +64,12 @@ minutes:
 }
 
 
+def minutes_content(title: str, slug: str, **fields: object) -> dict[str, object]:
+    """A MinutesContent answer for the fake provider: empty sections unless given."""
+    empty = {"agenda": [], "topics": [], "action_items": [], "open_questions": []}
+    return {"title": title, "slug": slug, **empty, **fields}
+
+
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-c", "user.name=test", "-c", "user.email=test@example.com", *args],

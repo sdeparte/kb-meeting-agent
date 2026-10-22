@@ -188,7 +188,7 @@ minutes:
 |---|---|---|
 | `dir` | `meetings` | folder of minutes |
 | `filename` | `{date}-{slug}.md` | file name |
-| `template` | built-in English template | file in the KB used as the minutes template |
+| `template` | built-in English template | file in the KB used as the minutes template. The agent writes the sections of `{body}` itself, with headings in the KB's language: `instructions` shape their content and style, not their structure. |
 | `index.file`, `index.row` | none | as for decisions: file the agent adds a row to in the minutes pull request, after the last table row of the file (code blocks ignored). Nothing is added if the file does not exist or has no table. |
 | `branch` | `meetings/{date}-{slug}` | branch name |
 
