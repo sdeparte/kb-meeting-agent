@@ -572,7 +572,7 @@ async def test_slash_questions_and_level_changes_are_recorded(make_agent):
     await agent.ask("What is the cooldown?", user="Bob")
     await agent.set_level("silent", announce=False, user="Carol")
     assert lines(agent)[0].startswith("Bob asked Scribe (AI): “What is the cooldown?”")
-    assert lines(agent)[1] == "Carol set Scribe (AI) to the silent level"
+    assert lines(agent)[1] == "Carol set Scribe (AI) to the `silent` level"
 
 
 async def test_contradictions_and_decisions_are_recorded(make_agent):
@@ -642,4 +642,4 @@ async def test_exchanges_are_recorded_in_the_kb_language(make_agent, kb, kb_orig
     agent, *_ = make_agent(extraction_interval_s=1000)
     await agent.on_segment(seg(0, "hello"))
     await agent.set_level("silent", announce=False, user="Carol")
-    assert lines(agent) == ["Carol a réglé Scribe (IA) sur le niveau silent"]
+    assert lines(agent) == ["Carol a réglé Scribe (IA) sur le niveau `silent`"]
