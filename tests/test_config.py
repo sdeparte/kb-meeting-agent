@@ -115,6 +115,18 @@ def test_unknown_transcriber_is_rejected(tmp_path, monkeypatch):
         load_config(write(tmp_path, text))
 
 
+def test_temperature_fallback_is_rejected_where_it_has_no_effect(tmp_path, monkeypatch):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
+        "{provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo}",
+        '{provider: openai-compatible, base_url: "http://localhost:8000/v1", model: whisper, '
+        "temperature_fallback: false}",
+    )
+    with pytest.raises(ValidationError, match="temperature_fallback"):
+        load_config(write(tmp_path, text))
+
+
 def test_agent_names_is_no_longer_accepted(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
     monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")

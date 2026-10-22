@@ -22,6 +22,7 @@ class FasterWhisperTranscriber:
             from faster_whisper import WhisperModel as model_factory
         self._model = model_factory(role.model, device=role.device, compute_type=role.compute_type)
         self._beam_size = role.beam_size
+        self._options = {} if role.temperature_fallback else {"temperature": 0.0}
 
     def transcribe(
         self, audio: np.ndarray, *, language: str | None, prompt: str
@@ -33,6 +34,7 @@ class FasterWhisperTranscriber:
             beam_size=self._beam_size,
             condition_on_previous_text=False,
             vad_filter=False,
+            **self._options,
         )
         segments = list(segments)
         text = " ".join(s.text.strip() for s in segments).strip()

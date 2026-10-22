@@ -810,7 +810,8 @@ class MeetingSession:
                 continue
             try:
                 audio = pcm16_to_float(read_wav(path))
-                if not cleaner.audible(audio):
+                duration = (record["end_ms"] - record["start_ms"]) / 1000
+                if not cleaner.audible(audio, duration):
                     continue
                 result = await asyncio.to_thread(
                     final.transcribe,
@@ -831,7 +832,6 @@ class MeetingSession:
                 segments += [fallback] if fallback else []
                 continue
             failures = 0
-            duration = (record["end_ms"] - record["start_ms"]) / 1000
             if text := cleaner.clean(result, duration):
                 segments.append(
                     Segment(

@@ -203,7 +203,7 @@ Participants can also address the agent by voice, by its `agent.name` ("Scribe, 
 | `403 Missing Access (50001)` at startup | the bot is not on the server given by `guild_id` |
 | The bot never joins; "voice connection timed out" | a channel or category override denies *Connect* |
 | "Unknown Integration" on a command | Discord cached old command ids: reload Discord (Ctrl+R) |
-| "Transcription is running N s behind" | the live model is too slow for the machine: use a smaller `transcription.live` model |
+| "Transcription is running N s behind" | the live engine is too slow for the machine: set `temperature_fallback: false` on `transcription.live`, then try a smaller model |
 | Phrases missing when people talk over each other | compare `utterances.jsonl` and `transcript.jsonl` in the meeting folder, and `stats.jsonl` for receive errors |
 
 Meeting folders live in `<data_dir>/meetings/<date>-<id>/`.

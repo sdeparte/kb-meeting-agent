@@ -98,6 +98,21 @@ class TranscriberRole(_Strict):
     device: str = "auto"
     compute_type: str = "int8"
     beam_size: int = Field(1, ge=1)
+    # mlx-whisper, faster-whisper: decode again at higher temperatures when the text loops or
+    # the model is unsure (up to 6 decodings of the utterance)
+    temperature_fallback: bool = True
+
+    @model_validator(mode="after")
+    def _temperature_fallback_needs_a_local_engine(self) -> TranscriberRole:
+        if "temperature_fallback" in self.model_fields_set and self.provider not in (
+            "mlx-whisper",
+            "faster-whisper",
+        ):
+            raise ValueError(
+                f"temperature_fallback has no effect with the {self.provider} provider; "
+                "only mlx-whisper and faster-whisper retry decodings"
+            )
+        return self
 
 
 class TranscriptionConfig(_Strict):
