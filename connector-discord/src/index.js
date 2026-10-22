@@ -224,8 +224,7 @@ async function handleCore(msg) {
 }
 
 function remember(requestId, messageId) {
-  sentIds.delete(requestId); // a new meeting reuses the ids: keep the latest, newest last
-  sentIds.set(requestId, messageId);
+  sentIds.set(requestId, messageId); // unique across meetings: the core prefixes them
   if (sentIds.size > SENT_IDS_KEPT) sentIds.delete(sentIds.keys().next().value);
 }
 

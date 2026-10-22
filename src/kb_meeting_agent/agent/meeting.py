@@ -158,8 +158,10 @@ class MeetingAgent:
         previous, self._thread = self._thread, ref
         try:
             yield
-        except LLMError:
-            await self._say(t(self._lang, "announce_failed"))  # never leave it unanswered
+        except Exception as exc:
+            # never leave it unanswered
+            key = "announce_failed" if isinstance(exc, LLMError) else "announce_error"
+            await self._say(t(self._lang, key))
             raise  # _guard still pauses the checks if the model is down
         finally:
             self._thread = previous
@@ -312,7 +314,11 @@ class MeetingAgent:
     async def _handle_addressed(self, segment: Segment) -> None:
         context = format_segments(self.transcript.window(self.settings.window_s))
         intent = await classify_addressed(
-            self.fast, names=self.settings.agent_names, context=context, utterance=segment.text
+            self.fast,
+            names=self.settings.agent_names,
+            context=context,
+            utterance=segment.text,
+            language=self._lang,
         )
         if intent.kind == "question":
             question = intent.question or segment.text

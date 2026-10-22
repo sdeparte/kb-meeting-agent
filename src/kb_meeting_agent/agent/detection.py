@@ -53,7 +53,7 @@ Return empty lists when nothing qualifies. Write `subject`, `statement` and `top
 
 ADDRESSED_SYSTEM = """You are {name}, the AI assistant of this meeting{aliases}. A participant just addressed you.
 Classify the request:
-- question: asks for information that may be in the knowledge base; put a self-contained version of the question in `question`.
+- question: asks for information that may be in the knowledge base; put a self-contained version of the question, in language "{language}", in `question`.
 - set_level: asks you to change how often you intervene; put silent, contradictions or context in `level`.
 - validate: approves the decision you proposed last.
 - ignore: rejects the decision you proposed last.
@@ -65,11 +65,11 @@ Keep it factual and under 200 words, in language "{language}". Return the full u
 
 
 async def classify_addressed(
-    llm: LLMProvider, *, names: list[str], context: str, utterance: str
+    llm: LLMProvider, *, names: list[str], context: str, utterance: str, language: str
 ) -> AddressedIntent:
     user = f"RECENT TRANSCRIPT:\n{context}\n\nUTTERANCE ADDRESSED TO YOU:\n{utterance}"
     aliases = f"; participants may also call you {', '.join(names[1:])}" if names[1:] else ""
-    system = ADDRESSED_SYSTEM.format(name=names[0], aliases=aliases)
+    system = ADDRESSED_SYSTEM.format(name=names[0], aliases=aliases, language=language)
     return await complete(llm, system, user, AddressedIntent)
 
 
