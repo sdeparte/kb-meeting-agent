@@ -827,3 +827,25 @@ async def test_a_code_file_cited_with_its_lines_or_repo_is_kept(make_agent, sour
     body = publisher.prs[0][3]
     assert body.count("[lib/game/cooldown.dart](https://github.com/acme/back/blob/main/") == 1
     assert ":1-1" not in body and "back:lib" not in body
+
+
+async def test_acted_is_false_until_the_agent_speaks(make_agent):
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    agent, *_ = make_agent(fast)
+    assert agent.acted is False
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    assert agent.acted is True
+
+
+async def test_ask_counts_as_acted(make_agent):
+    agent, *_ = make_agent()
+    await agent.ask("quel cooldown ?", user="Alice")
+    assert agent.acted is True
+
+
+async def test_acted_survives_a_snapshot(make_agent):
+    first, *_ = make_agent()
+    await first.ask("quel cooldown ?")
+    second, *_ = make_agent()
+    second.restore(first.snapshot())
+    assert second.acted is True
