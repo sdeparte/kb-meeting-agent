@@ -14,13 +14,31 @@ llm:
   # A cheaper Claude model for the frequent detection steps:
   # fast:    { provider: anthropic, model: claude-haiku-5-5, api_key: "${ANTHROPIC_API_KEY}" }
 
-knowledge_bases:
-  my-kb:
-    repo: owner/my-kb
-    base_branch: main
-    token: "${GITHUB_TOKEN}"   # needed to publish or to read a private KB; remove otherwise
-    # Language, decision record format and allowed scopes, minutes folder and index: these
-    # belong to the KB, in its .meeting-agent.yml (docs/configuration.md#kb-conventions-meeting-agentyml).
+# A project groups the repositories a meeting searches. Each repository is tagged
+# KnowledgeBase (exactly one per project: answers, fact-checks, decisions and minutes) or
+# CodeBase (read only: answers and the code files listed in decision pull requests), plus
+# free tags of your choice that label citations and steer the search (FrontEnd, BackEnd...).
+projects:
+  my-project:
+    repos:
+      kb:
+        repo: owner/my-kb
+        base_branch: main
+        tags: [KnowledgeBase]
+        token: "${GITHUB_TOKEN}"   # needed to publish or to read a private KB; remove otherwise
+        # Language, decision record format and allowed scopes, minutes folder and index: these
+        # belong to the KB, in its .meeting-agent.yml (docs/configuration.md#kb-conventions-meeting-agentyml).
+      # Code repositories are optional. A read-only token is enough.
+      # back:
+      #   repo: owner/my-backend
+      #   tags: [CodeBase, BackEnd]
+      #   token: "${GITHUB_CODE_TOKEN}"
+      # front:
+      #   repo: owner/my-app
+      #   base_branch: master
+      #   tags: [CodeBase, FrontEnd]
+      #   token: "${GITHUB_CODE_TOKEN}"
+      #   exclude: ["assets/**"]
 
 defaults:
   intervention_level: contradictions
