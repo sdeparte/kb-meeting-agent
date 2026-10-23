@@ -1,16 +1,17 @@
 // Connector <-> core protocol, version 2. Mirrors src/kb_meeting_agent/live/protocol.py.
-// Ids (speakers, channels, interactions) are opaque strings: here, Discord snowflakes.
+// Ids (users, channels, interactions) are opaque strings: here, Discord snowflakes. A user has
+// one id: the userId of audio frames and `speaking` is the user.id of interactions (opt-out).
 export const PROTOCOL_VERSION = 2;
 // Exit code when the env is refused (a missing credential): the core does not restart us
 export const CONFIG_ERROR_EXIT = 78;
 export const AUDIO_FRAME = 0x01;
-// kind (1 byte), timestamp (8), length of the speaker id (1); then the id (UTF-8), then the PCM
+// kind (1 byte), timestamp (8), length of the user id (1); then the id (UTF-8), then the PCM
 const HEADER_SIZE = 10;
 const MAX_ID_BYTES = 255;
 
 export function encodeAudioFrame(userId, timestampMs, pcm) {
   const id = Buffer.from(String(userId), "utf8");
-  if (id.length === 0 || id.length > MAX_ID_BYTES) throw new Error(`speaker ids are 1 to ${MAX_ID_BYTES} bytes`);
+  if (id.length === 0 || id.length > MAX_ID_BYTES) throw new Error(`user ids are 1 to ${MAX_ID_BYTES} bytes`);
   const frame = Buffer.alloc(HEADER_SIZE + id.length + pcm.length);
   frame.writeUInt8(AUDIO_FRAME, 0);
   frame.writeBigUInt64BE(BigInt(timestampMs), 1);

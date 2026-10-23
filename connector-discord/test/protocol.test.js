@@ -8,7 +8,7 @@ test("protocol version 2", () => {
 });
 
 for (const userId of ["18446744073709551615", "U0123ABCD", "spaces/abc-defg-hij/participants/9f8e7d", "Zoé"]) {
-  test(`audio frames round-trip with the speaker id ${userId}`, () => {
+  test(`audio frames round-trip with the user id ${userId}`, () => {
     const pcm = Buffer.from([1, 2, 3, 4]);
     const frame = encodeAudioFrame(userId, 1760000000123, pcm);
     assert.equal(frame.length, 10 + Buffer.byteLength(userId) + 4);
@@ -17,7 +17,7 @@ for (const userId of ["18446744073709551615", "U0123ABCD", "spaces/abc-defg-hij/
   });
 }
 
-test("speaker ids are 1 to 255 bytes", () => {
+test("user ids are 1 to 255 bytes", () => {
   assert.throws(() => encodeAudioFrame("", 0, Buffer.alloc(0)));
   assert.throws(() => encodeAudioFrame("x".repeat(256), 0, Buffer.alloc(0)));
   assert.throws(() => decodeAudioFrame(Buffer.from([AUDIO_FRAME, 0, 0, 0, 0, 0, 0, 0, 0, 5, 97])));
