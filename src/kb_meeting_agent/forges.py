@@ -7,7 +7,7 @@ a host is one Forge, one Publisher and one `provider` value in RepoConfig.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, assert_never
 
 from kb_meeting_agent.config import RepoConfig
 
@@ -52,3 +52,5 @@ def forge_for(config: RepoConfig) -> Forge:
     match config.provider:
         case "github":
             return GITHUB
+        case _:
+            assert_never(config.provider)
