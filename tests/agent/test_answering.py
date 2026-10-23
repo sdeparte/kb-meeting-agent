@@ -104,3 +104,16 @@ async def test_code_sources_are_labelled_and_linked(sources):
     link = f"https://github.com/acme/back/blob/main/{code.path}#L"
     assert f"`[BackEnd]` [{code.anchor}]({link}" in text
     assert "the code does" in strong.calls[0][1]
+
+
+async def test_a_source_without_its_lines_or_section_is_still_cited(sources):
+    code = [h for h in await sources.search("COOLDOWN_SECONDS", k=10) if h.repo == "back"][0]
+    fast = FakeProvider({"Queries": [{"queries": ["COOLDOWN_SECONDS"], "tags": []}]})
+    cited = [f"back:{code.path}", f"back:{code.path}", "reference/configuration.md", "back:x.php"]
+    strong = FakeProvider({"Answer": [{"covered": True, "answer": "30 s.", "sources": cited}]})
+    text = await answer_question(
+        fast, strong, sources, question="Cooldown?", context="", language="en"
+    )
+    assert text.count(f"[{code.anchor}]") == 1
+    assert "`reference/configuration.md#Neutralization`" in text
+    assert "x.php" not in text

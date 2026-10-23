@@ -92,9 +92,22 @@ async def answer_question(
     )
     if not answer.covered:
         return t(language, "not_covered")
-    by_anchor = {chunk.anchor: chunk for chunk in chunks}
-    sources = [_cite(kb, by_anchor[source]) for source in answer.sources if source in by_anchor]
+    cited = (_source_chunk(chunks, source) for source in answer.sources)
+    sources = dict.fromkeys(_cite(kb, chunk) for chunk in cited if chunk)
     return t(language, "answer", answer=answer.answer, sources=", ".join(sources) or "—")
+
+
+def _source_chunk(chunks: list[Chunk], source: str) -> Chunk | None:
+    """The excerpt a source names. Small models often drop the end of the anchor (qwen3:8b
+    cites `back:src/x.php` for `back:src/x.php:12-70`): then the first excerpt of that file."""
+    for chunk in chunks:
+        if chunk.anchor == source:
+            return chunk
+    for chunk in chunks:
+        file = f"{chunk.repo}:{chunk.path}" if chunk.start_line is not None else chunk.path
+        if file == source:
+            return chunk
+    return None
 
 
 def _cite(kb: KnowledgeBase, chunk: Chunk) -> str:
