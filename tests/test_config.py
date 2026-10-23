@@ -259,3 +259,35 @@ def test_knowledge_bases_is_refused(tmp_path, monkeypatch):
     text = CONFIG.format(data_dir=tmp_path) + "\nknowledge_bases: {}\n"
     with pytest.raises(ValidationError, match="knowledge_bases"):
         load_config(write(tmp_path, text))
+
+
+def _app(projects, default=None):
+    from kb_meeting_agent.config import AppConfig
+
+    llm = {role: {"provider": "fake", "model": "fake"} for role in ("fast", "strong", "embedding")}
+    repos = {"kb": {"repo": "acme/kb", "tags": ["KnowledgeBase"]}}
+    return AppConfig.model_validate(
+        {
+            "llm": llm,
+            "projects": {name: {"repos": repos} for name in projects},
+            "defaults": {"project": default} if default else {},
+        }
+    )
+
+
+def test_several_projects_need_a_default():
+    with pytest.raises(ValidationError, match="defaults.project"):
+        _app(["a", "b"])
+
+
+def test_the_default_project_must_exist():
+    with pytest.raises(ValidationError, match="nope is not a project"):
+        _app(["a"], default="nope")
+
+
+def test_project_named():
+    assert _app(["p"]).project_named(None)[0] == "p"
+    two = _app(["a", "b"], default="b")
+    assert two.project_named(None)[0] == "b"
+    assert two.project_named("a")[0] == "a"
+    assert two.project_named("zz") is None

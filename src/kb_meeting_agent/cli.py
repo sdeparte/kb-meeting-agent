@@ -34,7 +34,10 @@ def main(argv: list[str] | None = None) -> int:
     replay = commands.add_parser("replay", help="replay a recorded transcript (JSONL)")
     replay.add_argument("transcript", type=Path)
     replay.add_argument("--config", type=Path, default=Path("config.yml"))
-    replay.add_argument("--project", required=True, help="project name from the config")
+    replay.add_argument(
+        "--project",
+        help="project name from the config (default: defaults.project, or the only project)",
+    )
     replay.add_argument("--out", type=Path, default=Path("replay-out"))
     replay.add_argument("--level", choices=["silent", "contradictions", "context"])
     replay.add_argument("--auto-validate", action="store_true", help="validate every decision")
@@ -43,7 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--config", type=Path, default=Path("config.yml"))
     index = commands.add_parser("index", help="sync and index every repository of a project")
     index.add_argument("--config", type=Path, default=Path("config.yml"))
-    index.add_argument("--project", required=True, help="project name from the config")
+    index.add_argument(
+        "--project",
+        help="project name from the config (default: defaults.project, or the only project)",
+    )
     args = parser.parse_args(argv)
     if args.command == "run":
         return _run(args)
@@ -75,13 +81,14 @@ def _run(args: argparse.Namespace) -> int:
 
 async def _index(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    project = config.projects.get(args.project)
-    if project is None:
+    found = config.project_named(args.project)
+    if found is None:
         print(f"unknown project: {args.project}", file=sys.stderr)
         return 2
+    name, project = found
     embedder = build_provider(config.llm.embedding)
     sources = build_sources(
-        args.project, project, config.data_dir, embedder.embed, config.llm.embedding.model
+        name, project, config.data_dir, embedder.embed, config.llm.embedding.model
     )
     failed = False
     try:
@@ -100,18 +107,17 @@ async def _index(args: argparse.Namespace) -> int:
 
 async def _replay(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    project = config.projects.get(args.project)
-    if project is None:
+    found = config.project_named(args.project)
+    if found is None:
         print(f"unknown project: {args.project}", file=sys.stderr)
         return 2
+    name, project = found
     kb_name, kb_config = project.knowledge_base
     if args.publish and not kb_config.token:
         print(f"--publish needs a token for the {kb_name} repository", file=sys.stderr)
         return 2
     embedder = build_provider(config.llm.embedding)
-    kb = build_sources(
-        args.project, project, config.data_dir, embedder.embed, config.llm.embedding.model
-    )
+    kb = build_sources(name, project, config.data_dir, embedder.embed, config.llm.embedding.model)
     await kb.sync()
     for repo in kb.code_repos:
         try:

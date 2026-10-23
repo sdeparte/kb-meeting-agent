@@ -49,6 +49,28 @@ projects:
     assert "Meeting minutes:" in capsys.readouterr().out
 
 
+def test_replay_uses_the_default_project(tmp_path, kb_origin):
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+data_dir: {tmp_path / "data"}
+llm:
+  fast: {{provider: fake, model: fake}}
+  strong: {{provider: fake, model: fake}}
+  embedding: {{provider: fake, model: fake}}
+projects:
+  test:
+    repos:
+      kb: {{repo: acme/kb, clone_url: "{kb_origin}", tags: [KnowledgeBase]}}
+""",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "in.jsonl"
+    transcript.write_text("", encoding="utf-8")
+    out = tmp_path / "out"
+    assert main(["replay", str(transcript), "--config", str(config), "--out", str(out)]) == 0
+
+
 def test_unknown_project_is_an_error(tmp_path, kb_origin, capsys):
     config = tmp_path / "config.yml"
     config.write_text(

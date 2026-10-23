@@ -117,6 +117,7 @@ class ProjectConfig(_Strict):
 
 
 class DefaultsConfig(_Strict):
+    project: str | None = None  # the meeting's project when none is named; needed with several
     intervention_level: InterventionLevel = "contradictions"
     contradiction_min_confidence: float = Field(0.8, ge=0, le=1)
     context_min_interval_minutes: float = 5
@@ -221,6 +222,22 @@ class AppConfig(_Strict):
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     connector: ConnectorConfig | None = None
     transcription: TranscriptionConfig | None = None
+
+    @model_validator(mode="after")
+    def _default_project(self) -> AppConfig:
+        default = self.defaults.project
+        if default is not None and default not in self.projects:
+            raise ValueError(f"defaults.project {default} is not a project")
+        if default is None and len(self.projects) > 1:
+            raise ValueError("defaults.project is required when there are several projects")
+        return self
+
+    def project_named(self, name: str | None) -> tuple[str, ProjectConfig] | None:
+        """The named project, else the default one, else the only one; None if unknown."""
+        name = name or self.defaults.project or next(iter(self.projects), None)
+        if name is None or name not in self.projects:
+            return None
+        return name, self.projects[name]
 
 
 def load_config(path: Path) -> AppConfig:
