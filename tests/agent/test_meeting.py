@@ -107,7 +107,7 @@ async def test_decision_is_proposed_then_published_on_button(make_agent):
 
 async def test_unlisted_scope_publishes_nothing_and_keeps_the_decision_pending(make_agent, kb):
     decisions = kb.conventions.decisions.model_copy(update={"scopes": ["client", "serveur"]})
-    kb._conventions = kb.conventions.model_copy(update={"decisions": decisions})
+    kb.knowledge_base._conventions = kb.conventions.model_copy(update={"decisions": decisions})
     fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
     strong = FakeProvider({"DecisionDraft": [DRAFT, DRAFT]})  # "backend", twice
     agent, _, _, publisher, sink = make_agent(fast, strong)
