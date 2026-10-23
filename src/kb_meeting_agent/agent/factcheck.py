@@ -6,6 +6,7 @@ from typing import Literal
 
 from kb_meeting_agent.agent.detection import Claim
 from kb_meeting_agent.agent.prompting import format_chunks
+from kb_meeting_agent.config import KNOWLEDGE_BASE
 from kb_meeting_agent.kb.quote import find_quote_line
 from kb_meeting_agent.llm.base import LLMProvider, Schema, complete
 from kb_meeting_agent.ports import KnowledgeBase
@@ -55,7 +56,8 @@ async def check_claim(
     today: date,
     language: str,
 ) -> Flag | None:
-    chunks = await kb.search(f"{claim.subject} {claim.statement}", k=8)
+    # The knowledge base only: judging a sentence against code is beyond a local model.
+    chunks = await kb.search(f"{claim.subject} {claim.statement}", k=8, only_tags=(KNOWLEDGE_BASE,))
     if not chunks:
         return None
     verdict = await complete(
