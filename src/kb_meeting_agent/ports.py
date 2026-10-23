@@ -76,6 +76,26 @@ class Publisher(Protocol):
         """
         ...
 
+    async def aclose(self) -> None:
+        """Release the connections; the publisher is not used afterwards."""
+        ...
+
+
+class ChangeKeeper(Protocol):
+    """Where a change goes when it cannot be published, so that it can be published later.
+
+    Raises PublishError or OSError when it cannot keep the change either.
+    """
+
+    async def keep(
+        self,
+        branch: str,
+        files: dict[str, str],
+        title: str,
+        body: str,
+        index_rows: dict[str, str],
+    ) -> None: ...
+
 
 class KnowledgeBase(Protocol):
     @property

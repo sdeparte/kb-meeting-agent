@@ -6,7 +6,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from kb_meeting_agent.live.link import ConnectorLink
-from kb_meeting_agent.live.protocol import AudioFrame, encode_audio_frame
+from kb_meeting_agent.live.protocol import PROTOCOL_VERSION, AudioFrame, encode_audio_frame
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ async def link():
     await server.close()
 
 
-def hello(secret="s3cret", protocol=1):
+def hello(secret="s3cret", protocol=PROTOCOL_VERSION):
     return json.dumps({"type": "hello", "secret": secret, "protocol": protocol})
 
 
@@ -38,7 +38,7 @@ async def test_messages_audio_and_replies(link):
     async with connect(link.url) as ws:
         await ws.send(hello())
         kind, payload = await next_event(link)
-        assert kind == "connected" and payload["protocol"] == 1
+        assert kind == "connected" and payload["protocol"] == PROTOCOL_VERSION
         await ws.send(json.dumps({"type": "members", "members": []}))
         assert await next_event(link) == ("message", {"type": "members", "members": []})
         frame = AudioFrame("42", 1000, b"\x00\x01")

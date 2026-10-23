@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
 from collections.abc import AsyncIterator, Awaitable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date
-from pathlib import Path
 from typing import Any, Literal
 
 from kb_meeting_agent.agent.answering import answer_question
 from kb_meeting_agent.agent.decisions import (
-    INDEX_ROWS_FILE,
     Change,
     DecisionDraft,
     RelatedCode,
@@ -48,6 +45,7 @@ from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import (
     BranchChangedError,
     Button,
+    ChangeKeeper,
     KnowledgeBase,
     Modal,
     OutMessage,
@@ -56,7 +54,6 @@ from kb_meeting_agent.ports import (
     Publisher,
     PublishError,
 )
-from kb_meeting_agent.publish.local import DryRunPublisher
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +105,7 @@ class MeetingAgent:
         fast: LLMProvider,
         strong: LLMProvider,
         publisher: Publisher,
+        keeper: ChangeKeeper,
         sink: OutputSink,
         transcript: Transcript,
         settings: AgentSettings,
@@ -116,6 +114,7 @@ class MeetingAgent:
         self.fast = fast
         self.strong = strong
         self.publisher = publisher
+        self.keeper = keeper
         self.sink = sink
         self.transcript = transcript
         self.settings = settings
@@ -465,7 +464,7 @@ class MeetingAgent:
         note = "" if decision.anchored else t(self._lang, "excerpt_unanchored")
         change = self._decision_change(draft, number, excerpt, user, note)
         pr = await self._open_pr(change)
-        if isinstance(pr, Path):
+        if pr == "kept":
             decision.state = "kept"
             self._record("validated_kept", user=user, statement=decision.statement)
             return
@@ -550,10 +549,10 @@ class MeetingAgent:
                 log.error("refreshing %s failed: %s", decision.pr.url, exc)
                 await self._say(t(self._lang, "publish_failed", error=exc.public))
 
-    async def _open_pr(self, change: Change) -> PrRef | Path | None:
-        """Open the PR; on any failure keep the files locally so the work is not lost.
+    async def _open_pr(self, change: Change) -> PrRef | Literal["kept"] | None:
+        """Open the PR; on any failure hand the change to the keeper so the work is not lost.
 
-        Returns the PR, the local folder the files were kept in, or None if both failed.
+        Returns the PR, "kept" when the keeper has it, or None if both failed.
         """
         try:
             return await self.publisher.open_pr(
@@ -564,22 +563,16 @@ class MeetingAgent:
             # Participants only see a short summary; hosts, URLs, paths and response bodies
             # stay in the log.
             shown = exc.public if isinstance(exc, PublishError) else type(exc).__name__
-            kept = self.transcript.path.parent / "unpublished"
             try:
-                await DryRunPublisher(kept).open_pr(
-                    change.branch, change.files, change.title, change.body
+                await self.keeper.keep(
+                    change.branch, change.files, change.title, change.body, change.index_rows
                 )
-                if change.index_rows:
-                    (kept / change.branch / INDEX_ROWS_FILE).write_text(
-                        json.dumps(change.index_rows, ensure_ascii=False), encoding="utf-8"
-                    )
             except (PublishError, OSError):
                 log.exception("keeping %s (%s) locally failed", change.branch, change.title)
                 await self._say(t(self._lang, "publish_failed", error=shown))
                 return None
-            log.warning("kept %s locally in %s", change.branch, kept)
             await self._say(t(self._lang, "kept_locally", error=shown))
-            return kept
+            return "kept"
 
     async def end(
         self,

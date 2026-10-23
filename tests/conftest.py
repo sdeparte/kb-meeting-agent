@@ -1,9 +1,11 @@
 import subprocess
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 from kb_meeting_agent.config import RepoConfig
+from kb_meeting_agent.forges import GITHUB
 from kb_meeting_agent.kb.code import GitCodeRepository
 from kb_meeting_agent.kb.project import ProjectSources
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
@@ -156,6 +158,6 @@ async def sources(tmp_path, kb_repo, code_origin):
         "kb",
         ("KnowledgeBase",),
         [back],
-        links={"back": "https://github.com/acme/back/blob/main"},
+        links={"back": partial(GITHUB.file_url, "acme/back", "main")},
     )
     back.close()

@@ -12,26 +12,23 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
-from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE, append_table_row, existing_numbers
+from kb_meeting_agent.agent.decisions import append_table_row, existing_numbers
 from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
 from kb_meeting_agent.agent.transcript import Transcript
 from kb_meeting_agent.config import AppConfig, ProjectConfig, RepoConfig, TranscriptionConfig
 from kb_meeting_agent.kb.project import ProjectSources
-from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler
+from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler, speaker_file_id
 from kb_meeting_agent.live.pipeline import TranscriptionPipeline
 from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.base import LLMProvider
 from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import OutMessage, PrRef, Publisher
-from kb_meeting_agent.transcription.base import (
-    HallucinationFilter,
-    Transcriber,
-    pcm16_to_float,
-    read_wav,
-    vocabulary_prompt,
-)
+from kb_meeting_agent.publish.local import LocalKeeper
+from kb_meeting_agent.transcription.base import Transcriber, pcm16_to_float, read_wav
+from kb_meeting_agent.transcription.filtering import HallucinationFilter
+from kb_meeting_agent.transcription.vocabulary import vocabulary_prompt
 
 log = logging.getLogger(__name__)
 
@@ -249,7 +246,7 @@ class MeetingSession:
         """Ask again, with a growing delay, until the connector reports the voice as ready.
 
         A connector that has just (re)started may get the join before it is logged in to
-        Discord, and gives up after a failed reconnection: the core never does.
+        its platform, and gives up after a failed reconnection: the core never does.
         """
         delay = self.join_retry_s
         while not m.closing and self.meeting is m:
@@ -478,7 +475,7 @@ class MeetingSession:
         user_id = msg["user"]["id"]
         m.opted_out.add(user_id)
         m.assembler.opt_out(user_id)
-        for path in (m.dir / "audio").glob(f"*-{user_id}.wav"):
+        for path in (m.dir / "audio").glob(f"*-{speaker_file_id(user_id)}.wav"):
             path.unlink(missing_ok=True)
         await self.deps.link.send("optout", user_id=user_id)
         self._save_state()
@@ -583,7 +580,7 @@ class MeetingSession:
         return max(indexes, default=-1) + 1
 
     async def _retry_publish(self, msg: dict[str, Any]) -> None:
-        candidates = [(d, s) for d, s in self._states() if any((d / "unpublished").rglob("PR.md"))]
+        candidates = [(d, s) for d, s in self._states() if any(LocalKeeper.of_meeting(d).kept())]
         if not candidates:
             await self._reply(msg, t(self._lang(), "retry_publish_none"))
             return
@@ -594,36 +591,32 @@ class MeetingSession:
             return
         _, kb_config = project_config.knowledge_base
         publisher = self.deps.make_publisher(kb_config)
-        # The kept files were built on the KB of the meeting day: index rows are rebuilt on
-        # today's base, and a decision number taken since is not published.
-        kb = self.deps.make_sources(state["project"], project_config)
         try:
-            await self._republish_kept(msg, directory, kb, publisher)
+            # The kept files were built on the KB of the meeting day: index rows are rebuilt
+            # on today's base, and a decision number taken since is not published.
+            kb = self.deps.make_sources(state["project"], project_config)
+            try:
+                await self._republish_kept(msg, LocalKeeper.of_meeting(directory), kb, publisher)
+            finally:
+                kb.close()
         finally:
-            kb.close()
+            try:
+                await publisher.aclose()
+            except Exception:  # the result is already posted: a second reply would contradict it
+                log.exception("closing the publisher failed")
 
     async def _republish_kept(
-        self, msg: dict[str, Any], directory: Path, kb: ProjectSources, publisher: Publisher
+        self, msg: dict[str, Any], keeper: LocalKeeper, kb: ProjectSources, publisher: Publisher
     ) -> None:
         await kb.sync()  # the knowledge base only: the code is not needed to publish
         decisions_dir = kb.conventions.decisions.dir.rstrip("/") + "/"
         taken = existing_numbers(
             kb.list_files(decisions_dir) + await publisher.open_pr_paths(decisions_dir)
         )
-        kept = directory / "unpublished"
         urls: list[str] = []
         lines: list[str] = []
-        for description in sorted(kept.rglob("PR.md")):
-            root = description.parent
-            branch = root.relative_to(kept).as_posix()
-            heading, _, body = description.read_text(encoding="utf-8").partition("\n\n")
-            rows_file = root / INDEX_ROWS_FILE
-            rows = json.loads(rows_file.read_text(encoding="utf-8")) if rows_file.exists() else {}
-            files = {
-                path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
-                for path in root.rglob("*")
-                if path.is_file() and path not in (description, rows_file)
-            }
+        for change in keeper.kept():
+            branch, files, rows = change.branch, dict(change.files), change.index_rows
             numbers = existing_numbers(
                 path for path in files if path.startswith(decisions_dir) and path not in rows
             )
@@ -641,11 +634,11 @@ class MeetingSession:
                 else:
                     files[index_file] = rebuilt
             try:
-                pr = await publisher.open_pr(branch, files, heading.removeprefix("# "), body)
+                pr = await publisher.open_pr(branch, files, change.title, change.body)
             except Exception:
-                log.exception("republishing %s failed", root)
+                log.exception("republishing %s failed", branch)
                 continue
-            shutil.rmtree(root)
+            keeper.discard(branch)
             urls.append(pr.url)
         if urls:
             lines.insert(
@@ -677,6 +670,7 @@ class MeetingSession:
             fast=self.deps.fast,
             strong=self.deps.strong,
             publisher=self.deps.make_publisher(kb_config),
+            keeper=LocalKeeper.of_meeting(directory),
             sink=sink,
             transcript=Transcript(directory / "transcript.jsonl"),
             settings=AgentSettings(
@@ -776,6 +770,10 @@ class MeetingSession:
                 m.code_sync.cancel()
                 await asyncio.gather(m.code_sync, return_exceptions=True)
             m.kb.close()
+            try:
+                await m.publisher.aclose()
+            except Exception:
+                log.exception("closing the publisher failed")
             try:
                 self._save_state(status=status)
             except Exception:

@@ -71,6 +71,7 @@ Tag = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]+$")]
 
 
 class RepoConfig(_Strict):
+    provider: Literal["github"] = "github"  # where the repo is hosted (forges.py)
     repo: str
     base_branch: str = "main"
     token: str | None = None
@@ -125,11 +126,38 @@ class DefaultsConfig(_Strict):
     stale_page_days: int = 60
 
 
-class DiscordConfig(_Strict):
-    token: str
-    guild_id: str
+class ConnectorConfig(_Strict):
+    """The process that joins meetings on a platform (Discord, Meet, Slack...) for the core.
+
+    The core knows nothing of the platform: it runs `command` and gives it `env`, its
+    credentials and settings, plus the local link (KBMA_CORE_URL, KBMA_SECRET).
+    """
+
+    name: Annotated[str, StringConstraints(pattern=r"^[a-z0-9-]+$")]
+    # Default: [node, <dir>/src/index.js], dir defaulting to connector-<name>/ of this checkout
+    command: list[str] | None = Field(None, min_length=1)
     node: str = "node"
-    connector_dir: Path | None = None
+    dir: Path | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _default_command_options(self) -> ConnectorConfig:
+        ignored = sorted(self.model_fields_set & {"node", "dir"})
+        if self.command and ignored:
+            raise ValueError(f"{' and '.join(ignored)} only build the default command")
+        return self
+
+
+# The engines each engine-specific option of TranscriberRole applies to. Adding an engine
+# means listing it under the options it reads; it is refused the others.
+_ENGINE_OPTIONS: dict[str, tuple[str, ...]] = {
+    "base_url": ("openai-compatible",),
+    "api_key": ("openai-compatible",),
+    "device": ("faster-whisper",),
+    "compute_type": ("faster-whisper",),
+    "beam_size": ("faster-whisper",),
+    "temperature_fallback": ("mlx-whisper", "faster-whisper"),
+}
 
 
 class TranscriberRole(_Strict):
@@ -140,20 +168,19 @@ class TranscriberRole(_Strict):
     device: str = "auto"
     compute_type: str = "int8"
     beam_size: int = Field(1, ge=1)
-    # mlx-whisper, faster-whisper: decode again at higher temperatures when the text loops or
-    # the model is unsure (up to 6 decodings of the utterance)
+    # Decode again at higher temperatures when the text loops or the model is unsure (up to 6
+    # decodings of the utterance)
     temperature_fallback: bool = True
 
     @model_validator(mode="after")
-    def _temperature_fallback_needs_a_local_engine(self) -> TranscriberRole:
-        if "temperature_fallback" in self.model_fields_set and self.provider not in (
-            "mlx-whisper",
-            "faster-whisper",
-        ):
-            raise ValueError(
-                f"temperature_fallback has no effect with the {self.provider} provider; "
-                "only mlx-whisper and faster-whisper retry decodings"
-            )
+    def _options_of_another_engine(self) -> TranscriberRole:
+        for option in sorted(self.model_fields_set & _ENGINE_OPTIONS.keys()):
+            engines = _ENGINE_OPTIONS[option]
+            if self.provider not in engines:
+                raise ValueError(
+                    f"{option} has no effect with the {self.provider} provider; "
+                    f"only {' and '.join(engines)} read it"
+                )
         return self
 
 
@@ -168,7 +195,8 @@ class TranscriptionConfig(_Strict):
     min_voiced_seconds: float = Field(0.2, ge=0)
     min_avg_logprob: float | None = -1.0
     max_compression_ratio: float | None = Field(2.4, gt=0)
-    vocabulary: list[str] = Field(default_factory=list)  # hinted to Whisper before the glossary
+    # hinted before the glossary to the engines that take a prompt
+    vocabulary: list[str] = Field(default_factory=list)
     vocabulary_max_chars: int = Field(600, ge=0)
 
 
@@ -191,12 +219,18 @@ class AppConfig(_Strict):
     llm: LLMConfig
     projects: dict[str, ProjectConfig]
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
-    discord: DiscordConfig | None = None
+    connector: ConnectorConfig | None = None
     transcription: TranscriptionConfig | None = None
 
 
 def load_config(path: Path) -> AppConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    # Before substituting: a validation error would echo the section, token included
+    if isinstance(raw, dict) and "discord" in raw:
+        raise ConfigError(
+            "the discord section is now `connector: {name: discord, env: {DISCORD_TOKEN: ..., "
+            "DISCORD_GUILD_ID: ...}}`; connector_dir is now dir (docs/configuration.md#connector)"
+        )
     config = AppConfig.model_validate(_substitute(raw))
     config.data_dir = config.data_dir.expanduser()
     return config

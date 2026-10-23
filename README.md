@@ -103,6 +103,8 @@ uv run kb-meeting-agent index --project my-project
 
 **Upgrading from `knowledge_bases`.** Each former entry becomes a project with one repository tagged `KnowledgeBase`. Before upgrading, close or `/meeting retry-publish` every pending meeting: meetings saved by the previous version can neither be resumed nor republished. The KB is cloned and indexed again under `projects/`; the former `<data_dir>/kb/` directory can then be deleted.
 
+**Upgrading from the `discord` section.** It becomes `connector: {name: discord, env: {DISCORD_TOKEN: ..., DISCORD_GUILD_ID: ...}}`, and `connector_dir` becomes `dir` ([docs/configuration.md](docs/configuration.md#connector)). The core and `connector-discord` speak protocol v2 and must be updated together (`npm ci` in `connector-discord/`). A transcription option that the chosen engine ignores (`beam_size` on `mlx-whisper`, say) now stops the configuration from loading instead of doing nothing.
+
 ### 5. Describe your KB's conventions (optional)
 
 Add a `.meeting-agent.yml` at the root of the KB repository to tell the agent its language, which files to skip, how decision records are named and numbered, where minutes go, and which status tags the pages use. Without it, the agent uses English and generic defaults. See [docs/configuration.md](docs/configuration.md#kb-conventions-meeting-agentyml).
@@ -161,9 +163,11 @@ The agent answers when its `agent.name`, or one of its `agent.aliases`, appears 
 ### 2. Configure
 
 ```yaml
-discord:
-  token: "${DISCORD_TOKEN}"
-  guild_id: "123456789012345678"
+connector:
+  name: discord
+  env:
+    DISCORD_TOKEN: "${DISCORD_TOKEN}"
+    DISCORD_GUILD_ID: "123456789012345678"
 
 transcription:
   language: fr
@@ -171,7 +175,7 @@ transcription:
   final: { provider: mlx-whisper, model: mlx-community/whisper-large-v3-mlx }         # optional second pass
 ```
 
-On Linux or WSL, use `provider: faster-whisper` (`model: small` on CPU, `large-v3` on a CUDA GPU). Every option is in [docs/configuration.md](docs/configuration.md#discord-and-transcription).
+On Linux or WSL, use `provider: faster-whisper` (`model: small` on CPU, `large-v3` on a CUDA GPU). Every option is in [docs/configuration.md](docs/configuration.md#connector-and-transcription).
 
 ### 3. Install and run
 
@@ -208,7 +212,7 @@ Participants can also address the agent by voice, by its `agent.name` ("Scribe, 
 
 | Symptom | Cause |
 |---|---|
-| `403 Missing Access (50001)` at startup | the bot is not on the server given by `guild_id` |
+| `403 Missing Access (50001)` at startup | the bot is not on the server given by `DISCORD_GUILD_ID` (in `connector.env`) |
 | The bot never joins; "voice connection timed out" | a channel or category override denies *Connect* |
 | "Unknown Integration" on a command | Discord cached old command ids: reload Discord (Ctrl+R) |
 | "Transcription is running N s behind" | the live engine is too slow for the machine: set `temperature_fallback: false` on `transcription.live`, then try a smaller model |

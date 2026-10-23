@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import Literal
 
 from kb_meeting_agent.config import CODE_BASE, KNOWLEDGE_BASE, ProjectConfig
 from kb_meeting_agent.conventions import KbConventions
+from kb_meeting_agent.forges import forge_for
 from kb_meeting_agent.kb.code import GitCodeRepository
 from kb_meeting_agent.kb.index import Embedder
 from kb_meeting_agent.kb.repo import GLOSSARY_MAX_CHARS, GitMarkdownKnowledgeBase
@@ -17,6 +19,9 @@ from kb_meeting_agent.models import Chunk
 log = logging.getLogger(__name__)
 
 PREFERRED_TAG_BOOST = 1.5
+
+# A code repository's web link to one of its files, given the path and the lines.
+FileLink = Callable[[str, tuple[int, int] | None], str]
 
 
 class ProjectSources:
@@ -28,13 +33,13 @@ class ProjectSources:
         kb_name: str,
         kb_tags: tuple[str, ...],
         code: list[GitCodeRepository],
-        links: dict[str, str],
+        links: dict[str, FileLink],
     ) -> None:
         self._kb = kb
         self._kb_name = kb_name
         self._kb_tags = kb_tags
         self.code_repos = code
-        self._links = links  # repo name -> https://github.com/<repo>/blob/<branch>
+        self._links = links  # repo name -> its files' web links
 
     @property
     def conventions(self) -> KbConventions:
@@ -110,14 +115,14 @@ class ProjectSources:
         return [self._label(piece) for piece in self._kb.section(chunk)]
 
     def link(self, chunk: Chunk) -> str | None:
-        base = self._links.get(chunk.repo)
-        if chunk.start_line is None or base is None:
+        link = self._links.get(chunk.repo)
+        if chunk.start_line is None or chunk.end_line is None or link is None:
             return None
-        return f"{base}/{chunk.path}#L{chunk.start_line}-L{chunk.end_line}"
+        return link(chunk.path, (chunk.start_line, chunk.end_line))
 
     def link_file(self, repo: str, path: str) -> str | None:
-        base = self._links.get(repo)
-        return f"{base}/{path}" if base else None
+        link = self._links.get(repo)
+        return link(path, None) if link else None
 
     def code_exists(self, repo: str, path: str) -> bool:
         return any(r.name == repo and r.exists(path) for r in self.code_repos)
@@ -154,9 +159,9 @@ def build_sources(
         GitCodeRepository(repo_name, repo, root / repo_name, embed, embedding_model)
         for repo_name, repo in project.code_repos
     ]
-    links = {  # GitHub only: a repository cloned from elsewhere is cited without a link
-        repo_name: f"https://github.com/{repo.repo}/blob/{repo.base_branch}"
+    links = {  # a repository cloned from another host than its forge is cited without a link
+        repo_name: partial(forge_for(repo).file_url, repo.repo, repo.base_branch)
         for repo_name, repo in project.code_repos
-        if repo.clone_url is None or repo.clone_url.startswith("https://github.com/")
+        if repo.clone_url is None or repo.clone_url.startswith(f"{forge_for(repo).origin}/")
     }
     return ProjectSources(kb, kb_name, tuple(kb_config.tags), code, links)

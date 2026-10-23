@@ -85,9 +85,11 @@ def test_anthropic_embedding_is_rejected(tmp_path, monkeypatch):
 
 
 LIVE = """
-discord:
-  token: "${TEST_DISCORD_TOKEN}"
-  guild_id: "123456789012345678"
+connector:
+  name: discord
+  env:
+    DISCORD_TOKEN: "${TEST_DISCORD_TOKEN}"
+    DISCORD_GUILD_ID: "123456789012345678"
 transcription:
   language: fr
   live: {provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo}
@@ -100,8 +102,9 @@ def test_live_sections(tmp_path, monkeypatch):
     for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
         monkeypatch.setenv(name, "x")
     cfg = load_config(write(tmp_path, CONFIG.format(data_dir=tmp_path) + LIVE))
-    assert cfg.discord.guild_id == "123456789012345678"
-    assert cfg.discord.node == "node"
+    assert cfg.connector.name == "discord"
+    assert cfg.connector.env["DISCORD_GUILD_ID"] == "123456789012345678"
+    assert cfg.connector.node == "node" and cfg.connector.command is None
     assert cfg.transcription.live.provider == "mlx-whisper"
     assert cfg.transcription.final.beam_size == 5
     assert cfg.transcription.workers == 2
@@ -112,7 +115,34 @@ def test_live_sections_are_optional(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
     monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
     cfg = load_config(write(tmp_path, CONFIG.format(data_dir=tmp_path)))
-    assert cfg.discord is None and cfg.transcription is None
+    assert cfg.connector is None and cfg.transcription is None
+
+
+def test_the_former_discord_section_says_how_to_migrate_without_its_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    monkeypatch.setenv("TEST_DISCORD_TOKEN", "MTIz.secret-tail")
+    text = (
+        CONFIG.format(data_dir=tmp_path)
+        + 'discord: {token: "${TEST_DISCORD_TOKEN}", guild_id: "1", connector_dir: x}\n'
+    )
+    with pytest.raises(ConfigError, match="connector:.*connector_dir is now dir") as raised:
+        load_config(write(tmp_path, text))
+    assert "secret-tail" not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "extra", ["node: /opt/node/bin/node", "dir: connector-meet", "command: []"]
+)
+def test_a_connector_option_without_effect_is_rejected(tmp_path, monkeypatch, extra):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    command = "" if extra.startswith("command") else "\n  command: [python, -m, meet]"
+    text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
+        "  name: discord", f"  name: discord{command}\n  {extra}"
+    )
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, text))
 
 
 def test_unknown_transcriber_is_rejected(tmp_path, monkeypatch):
@@ -134,6 +164,25 @@ def test_temperature_fallback_is_rejected_where_it_has_no_effect(tmp_path, monke
         "temperature_fallback: false}",
     )
     with pytest.raises(ValidationError, match="temperature_fallback"):
+        load_config(write(tmp_path, text))
+
+
+@pytest.mark.parametrize(
+    ("role", "option"),
+    [
+        ("{provider: mlx-whisper, model: m, device: cpu}", "device"),
+        ("{provider: mlx-whisper, model: m, beam_size: 5}", "beam_size"),
+        ("{provider: faster-whisper, model: m, base_url: 'http://x'}", "base_url"),
+        ("{provider: openai-compatible, model: m, compute_type: int8}", "compute_type"),
+    ],
+)
+def test_an_engine_option_is_rejected_on_other_engines(tmp_path, monkeypatch, role, option):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
+        "{provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo}", role
+    )
+    with pytest.raises(ValidationError, match=f"{option} has no effect"):
         load_config(write(tmp_path, text))
 
 

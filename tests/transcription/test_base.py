@@ -1,16 +1,16 @@
 import numpy as np
 
 from kb_meeting_agent.transcription.base import (
-    HallucinationFilter,
     TranscriptionResult,
     float_to_pcm16,
     pcm16_to_float,
     read_wav,
-    vocabulary_prompt,
     voiced_seconds,
     write_wav,
 )
 from kb_meeting_agent.transcription.fake import FakeTranscriber
+from kb_meeting_agent.transcription.filtering import HallucinationFilter
+from kb_meeting_agent.transcription.vocabulary import vocabulary_prompt
 
 GLOSSARY = """# Glossaire
 
