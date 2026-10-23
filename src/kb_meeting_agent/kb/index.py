@@ -53,6 +53,7 @@ class SearchIndex:
                 self._db.execute(f"ALTER TABLE chunks ADD COLUMN {column} INTEGER")
         self._db.commit()
         self._embed = embed
+        self._vectors: tuple[list[int], np.ndarray] | None = None  # ids, normalised rows
 
     def close(self) -> None:
         self._db.close()
@@ -70,6 +71,7 @@ class SearchIndex:
         self._db.commit()
 
     def clear(self) -> None:
+        self._vectors = None
         self._db.executescript("DELETE FROM files; DELETE FROM chunks; DELETE FROM chunks_fts;")
         self._db.commit()
 
@@ -77,6 +79,7 @@ class SearchIndex:
         return dict(self._db.execute("SELECT path, hash FROM files"))
 
     def remove_file(self, path: str) -> None:
+        self._vectors = None
         ids = [row[0] for row in self._db.execute("SELECT id FROM chunks WHERE path = ?", (path,))]
         self._db.executemany("DELETE FROM chunks_fts WHERE rowid = ?", [(i,) for i in ids])
         self._db.execute("DELETE FROM chunks WHERE path = ?", (path,))
@@ -108,6 +111,7 @@ class SearchIndex:
             )
         self._db.execute("INSERT INTO files(path, hash) VALUES (?, ?)", (path, digest))
         self._db.commit()
+        self._vectors = None
 
     async def search(self, query: str, k: int = 8, boost_paths: Iterable[str] = ()) -> list[Chunk]:
         lexical = self._lexical(query, limit=k * 4)
@@ -164,14 +168,16 @@ class SearchIndex:
         ]
 
     def _semantic(self, query_vector: list[float], limit: int) -> list[int]:
-        rows = self._db.execute("SELECT id, vector FROM chunks").fetchall()
-        if not rows:
-            return []
-        ids = [row[0] for row in rows]
-        matrix = np.stack([np.frombuffer(row[1], dtype=np.float32) for row in rows])
+        if self._vectors is None:  # loaded once, until the index changes
+            rows = self._db.execute("SELECT id, vector FROM chunks").fetchall()
+            if not rows:
+                return []
+            matrix = np.stack([np.frombuffer(row[1], dtype=np.float32) for row in rows])
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            self._vectors = ([row[0] for row in rows], matrix / np.where(norms == 0, 1.0, norms))
+        ids, matrix = self._vectors
         query = np.asarray(query_vector, dtype=np.float32)
-        norms = np.linalg.norm(matrix, axis=1) * (np.linalg.norm(query) or 1.0)
-        similarities = (matrix @ query) / np.where(norms == 0, 1.0, norms)
+        similarities = matrix @ (query / (np.linalg.norm(query) or 1.0))
         order = np.argsort(-similarities)[:limit]
         return [ids[i] for i in order]
 

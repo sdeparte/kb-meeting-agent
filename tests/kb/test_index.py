@@ -112,3 +112,20 @@ def test_old_index_files_gain_the_line_columns(tmp_path):
     SearchIndex(path, FakeProvider().embed).close()
     columns = {row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(chunks)")}
     assert {"start_line", "end_line"} <= columns
+
+
+async def test_vectors_are_loaded_once_until_the_index_changes(index, monkeypatch):
+    from kb_meeting_agent.kb import index as index_module
+
+    await index.upsert_file("a.md", "h", [chunk("a.md", "cooldown alpha")])
+    loads = []
+    stack = index_module.np.stack
+    monkeypatch.setattr(index_module.np, "stack", lambda *a, **k: loads.append(1) or stack(*a, **k))
+    await index.search("cooldown", k=1)
+    await index.search("alpha", k=1)
+    assert len(loads) == 1
+    await index.upsert_file("b.md", "h", [chunk("b.md", "zeppelin")])
+    assert (await index.search("zeppelin", k=1))[0].path == "b.md"
+    assert len(loads) == 2
+    index.remove_file("b.md")
+    assert all(c.path != "b.md" for c in await index.search("zeppelin", k=5))
