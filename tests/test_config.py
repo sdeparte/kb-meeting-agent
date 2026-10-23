@@ -131,6 +131,20 @@ def test_the_former_discord_section_says_how_to_migrate_without_its_token(tmp_pa
     assert "secret-tail" not in str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "extra", ["node: /opt/node/bin/node", "dir: connector-meet", "command: []"]
+)
+def test_a_connector_option_without_effect_is_rejected(tmp_path, monkeypatch, extra):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    command = "" if extra.startswith("command") else "\n  command: [python, -m, meet]"
+    text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
+        "  name: discord", f"  name: discord{command}\n  {extra}"
+    )
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, text))
+
+
 def test_unknown_transcriber_is_rejected(tmp_path, monkeypatch):
     for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
         monkeypatch.setenv(name, "x")

@@ -120,8 +120,8 @@ The connector is the process that joins meetings on a platform and relays audio,
 | `name` | (required) | the connector, e.g. `discord` (lowercase letters, digits, `-`) |
 | `env` | `{}` | environment of the connector: its credentials and settings. Use `${VAR}` for secrets |
 | `command` | `[<node>, <dir>/src/index.js]` | how to start the connector, for one that is not a bundled Node.js connector |
-| `node` | `node` | Node.js 22.12+ executable, for the default `command` |
-| `dir` | `connector-<name>/` of this checkout | where the connector lives, for the default `command` |
+| `node` | `node` | Node.js 22.12+ executable, for the default `command` (refused with `command`) |
+| `dir` | `connector-<name>/` of this checkout | where the connector lives, for the default `command` (refused with `command`) |
 
 The connector receives `env`, `PATH`, `HOME`, the locale and temporary-folder variables, and the local connection details (`KBMA_CORE_URL`, `KBMA_SECRET`, which `env` cannot override): never model keys or repository tokens.
 
