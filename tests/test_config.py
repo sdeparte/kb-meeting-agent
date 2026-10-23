@@ -190,6 +190,13 @@ def test_an_empty_agent_name_is_rejected(tmp_path, monkeypatch, agent):
         ),
         ({"a": {"repo": "x/a", "tags": ["KnowledgeBase"], "include": ["src/**"]}}, "include"),
         ({"a": {"repo": "x/a", "tags": ["KnowledgeBase", "bad tag"]}}, "pattern"),
+        (
+            {
+                "a": {"repo": "x/a", "tags": ["KnowledgeBase"]},
+                "b": {"repo": "x/b", "tags": ["CodeBase"], "language": "fr"},
+            },
+            "language",
+        ),
     ],
 )
 def test_project_rules(repos, message):

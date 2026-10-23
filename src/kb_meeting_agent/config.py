@@ -89,6 +89,8 @@ class RepoConfig(_Strict):
             raise ValueError(f"{self.repo} must be tagged {KNOWLEDGE_BASE} or {CODE_BASE}")
         if CODE_BASE not in self.tags and (self.include or self.exclude):
             raise ValueError(f"{self.repo}: include and exclude apply to {CODE_BASE} repos only")
+        if KNOWLEDGE_BASE not in self.tags and self.language is not None:
+            raise ValueError(f"{self.repo}: language applies to the {KNOWLEDGE_BASE} repo only")
         return self
 
 
