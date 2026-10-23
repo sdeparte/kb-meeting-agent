@@ -789,3 +789,40 @@ async def test_invented_code_files_are_dropped(make_agent, sources):
     assert "## Code files that may be affected" in body
     assert "https://github.com/acme/back/blob/main/lib/game/cooldown.dart" in body
     assert "invented.dart" not in body and ".env" not in body
+
+
+async def test_a_decision_is_drafted_from_the_kb_first_then_a_little_code(make_agent, sources):
+    searched = []
+    search = sources.search
+
+    async def spy(query, k=8, prefer_tags=(), only_tags=()):
+        searched.append((k, only_tags))
+        return await search(query, k, prefer_tags, only_tags)
+
+    sources.search = spy
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, _, _, publisher, _ = make_agent(fast, strong)
+    agent.kb = sources
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    assert searched == [(6, ("KnowledgeBase",)), (3, ("CodeBase",))]
+    assert len(publisher.prs) == 1
+
+
+async def test_a_code_file_cited_with_its_lines_or_repo_is_kept(make_agent, sources):
+    draft = DRAFT | {
+        "related_code": [
+            {"repo": "back", "path": "lib/game/cooldown.dart:1-1", "reason": "lines left in"},
+            {"repo": "back", "path": "back:lib/game/cooldown.dart", "reason": "repo left in"},
+        ]
+    }
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [draft]})
+    agent, _, _, publisher, _ = make_agent(fast, strong)
+    agent.kb = sources
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    body = publisher.prs[0][3]
+    assert body.count("[lib/game/cooldown.dart](https://github.com/acme/back/blob/main/") == 1
+    assert ":1-1" not in body and "back:lib" not in body
