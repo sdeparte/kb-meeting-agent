@@ -80,3 +80,35 @@ async def test_section_leaves_out_another_section_with_the_same_headings(index):
         "notes 2",
     ]
     assert [c.text for c in index.section("a.md", ("Notes",), "notes 3")] == ["notes 3"]
+
+
+async def test_code_chunks_keep_their_lines(index):
+    code = Chunk(
+        "src/x.php",
+        (),
+        "function cooldown()",
+        None,
+        None,
+        repo="back",
+        tags=("CodeBase",),
+        start_line=12,
+        end_line=70,
+    )
+    await index.upsert_file("src/x.php", "h", [code])
+    [found] = await index.search("cooldown", k=1)
+    assert (found.start_line, found.end_line) == (12, 70)
+
+
+def test_old_index_files_gain_the_line_columns(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.sqlite"
+    db = sqlite3.connect(path)
+    db.executescript(
+        "CREATE TABLE chunks (id INTEGER PRIMARY KEY, path TEXT NOT NULL, headings TEXT NOT NULL, "
+        "text TEXT NOT NULL, status TEXT, verified_date TEXT, vector BLOB NOT NULL);"
+    )
+    db.close()
+    SearchIndex(path, FakeProvider().embed).close()
+    columns = {row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(chunks)")}
+    assert {"start_line", "end_line"} <= columns
