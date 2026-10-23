@@ -185,10 +185,15 @@ def button_commands(button_id: str, lang: str) -> str | None:
 
 
 def catalog_payload() -> list[dict[str, Any]]:
-    """The commands a connector offers as slash commands, sent to it in a `commands` message."""
+    """The commands a connector offers as slash commands, sent to it in a `commands` message.
+
+    `words` are what follows the `!` in the chat: a connector that starts or ends a meeting
+    on its own (a browser connector invited into a call) types `!` + one of them, never a
+    word of its own."""
     return [
         {
             "id": command.id,
+            "words": list(command.words),
             "slash": list(command.slash),
             "description": command.description,
             "options": [
