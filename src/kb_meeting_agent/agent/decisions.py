@@ -105,6 +105,12 @@ class RelatedPage(Schema):
     reason: str
 
 
+class RelatedCode(Schema):
+    repo: str
+    path: str
+    reason: str
+
+
 class DecisionDraft(Schema):
     title: str
     slug: str
@@ -113,6 +119,7 @@ class DecisionDraft(Schema):
     decision: str
     consequences: str
     related_pages: list[RelatedPage]
+    related_code: list[RelatedCode]
 
 
 @cache
@@ -143,7 +150,7 @@ LISTED_SCOPE = "scope (what it applies to: exactly one of {scopes})"
 
 DRAFT_SYSTEM = """You write a decision record for a knowledge base, following the KB's own conventions below.
 Use only the decision statement, the transcript quote and the KB excerpts. Do not invent facts.
-Fields: title (short), slug (kebab-case, ASCII), {scope_field}, context, decision, consequences (Markdown allowed), related_pages (KB pages this decision probably makes outdated: the path part of an excerpt's source, the section heading, one-sentence reason).
+Fields: title (short), slug (kebab-case, ASCII), {scope_field}, context, decision, consequences (Markdown allowed), related_pages (KB pages this decision probably makes outdated: the path part of an excerpt's source, the section heading, one-sentence reason), related_code (source files from the code excerpts, those with a `tags` attribute, that this decision probably requires changing: the repo and path parts of the excerpt's source, one-sentence reason; empty when there is no code excerpt).
 Write in language "{language}".
 
 KB CONVENTIONS:
@@ -162,8 +169,7 @@ async def draft_decision(
 ) -> DecisionDraft:
     """Raises LLMInvalidOutput when the model keeps answering a scope outside `scopes`."""
     user = (
-        f"DECISION: {statement}\n\nTRANSCRIPT QUOTE: {quote}\n\n"
-        f"KB EXCERPTS:\n{format_chunks(chunks)}"
+        f"DECISION: {statement}\n\nTRANSCRIPT QUOTE: {quote}\n\nEXCERPTS:\n{format_chunks(chunks)}"
     )
     scope_field = (
         LISTED_SCOPE.format(scopes=", ".join(json.dumps(s, ensure_ascii=False) for s in scopes))
@@ -207,6 +213,7 @@ def build_decision_change(
     index_content: str | None,
     language: str,
     excerpt_note: str = "",
+    code_links: Mapping[tuple[str, str], str] | None = None,  # (repo, path) -> web link
 ) -> Change:
     values: dict[str, object] = {
         "title": draft.title,
@@ -239,6 +246,19 @@ def build_decision_change(
         quote=(f"{excerpt_note}\n\n" if excerpt_note else "") + _blockquote(quote),
         related=related,
     )
+    if draft.related_code:
+        links = code_links or {}
+        code = "\n".join(
+            f"- `{item.repo}` "
+            + (
+                f"[{item.path}]({links[(item.repo, item.path)]})"
+                if (item.repo, item.path) in links
+                else f"`{item.path}`"
+            )
+            + f" — {item.reason}"
+            for item in draft.related_code
+        )
+        body += t(language, "decision_pr_code", items=code)
     return Change(
         branch=render_template(conventions.branch, values),
         files=files,

@@ -4,6 +4,7 @@ import pytest
 
 from kb_meeting_agent.agent.decisions import (
     DecisionDraft,
+    RelatedCode,
     RelatedPage,
     _draft_model,
     append_table_row,
@@ -29,6 +30,7 @@ DRAFT = DecisionDraft(
             path="reference/configuration.md", section="Neutralization", reason="Default changes"
         )
     ],
+    related_code=[],
 )
 
 
@@ -181,3 +183,45 @@ def test_append_table_row_ignores_code_fences():
     content = "| a |\n|---|\n| 1 |\n\n```\n| not table |\n```\n"
     expected = "| a |\n|---|\n| 1 |\n| 2 |\n\n```\n| not table |\n```\n"
     assert append_table_row(content, "| 2 |") == expected
+
+
+def test_code_files_get_their_own_section():
+    draft = DRAFT.model_copy(
+        update={
+            "related_code": [
+                RelatedCode(repo="back", path="src/x.php", reason="value changes"),
+                RelatedCode(repo="back", path="src/y.php", reason="no link"),
+            ]
+        }
+    )
+    change = build_decision_change(
+        conventions=DecisionConventions(),
+        template="# {title}",
+        draft=draft,
+        number=3,
+        meeting_date=date(2026, 10, 15),
+        quote="q",
+        validated_by="Bob",
+        index_content=None,
+        language="en",
+        code_links={("back", "src/x.php"): "https://github.com/acme/back/blob/main/src/x.php"},
+    )
+    assert "## Code files that may be affected" in change.body
+    link = "[src/x.php](https://github.com/acme/back/blob/main/src/x.php)"
+    assert f"- `back` {link} — value changes" in change.body
+    assert "- `back` `src/y.php` — no link" in change.body
+
+
+def test_no_code_section_without_code_files():
+    change = build_decision_change(
+        conventions=DecisionConventions(),
+        template="# {title}",
+        draft=DRAFT,
+        number=3,
+        meeting_date=date(2026, 10, 15),
+        quote="q",
+        validated_by="Bob",
+        index_content=None,
+        language="en",
+    )
+    assert "Code files" not in change.body

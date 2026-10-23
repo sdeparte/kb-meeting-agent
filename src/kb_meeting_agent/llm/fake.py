@@ -41,6 +41,7 @@ FAKE_DEFAULTS: dict[str, object] = {
         "decision": "",
         "consequences": "",
         "related_pages": [],
+        "related_code": [],
     },
     "SliceSummary": {"summary": ""},
     "MinutesContent": {
