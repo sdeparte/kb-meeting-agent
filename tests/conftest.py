@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 
 from kb_meeting_agent.config import RepoConfig
+from kb_meeting_agent.kb.code import GitCodeRepository
+from kb_meeting_agent.kb.project import ProjectSources
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
 from kb_meeting_agent.llm.fake import FakeProvider
 
@@ -130,3 +132,24 @@ async def kb(tmp_path, kb_origin):
     await knowledge_base.sync()
     yield knowledge_base
     knowledge_base.close()
+
+
+@pytest.fixture
+async def sources(tmp_path, kb, code_origin):
+    """The `kb` fixture plus a `back` code repository (CodeBase, BackEnd)."""
+    back = GitCodeRepository(
+        "back",
+        RepoConfig(repo="acme/back", clone_url=str(code_origin), tags=["CodeBase", "BackEnd"]),
+        tmp_path / "back",
+        FakeProvider().embed,
+        "fake",
+    )
+    await back.sync()
+    yield ProjectSources(
+        kb,
+        "kb",
+        ("KnowledgeBase",),
+        [back],
+        links={"back": "https://github.com/acme/back/blob/main"},
+    )
+    back.close()
