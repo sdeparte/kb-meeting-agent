@@ -118,8 +118,9 @@ async def test_bots_do_not_keep_the_meeting_alive(make_session):
     await session.on_event(
         "message", {"type": "members", "members": [{"id": "bot", "name": "Scribe", "bot": True}]}
     )
-    await asyncio.sleep(0.2)
-    assert session.meeting is None
+    async with asyncio.timeout(10):  # the close syncs the KB: its time varies with the load
+        while session.meeting is not None:
+            await asyncio.sleep(0.02)
     assert link.of("leave") == [{}]
 
 
