@@ -2,13 +2,32 @@ from __future__ import annotations
 
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        "help_header": "Commands (type them in the chat):",
+        "decision_reply_hint": "Reply {commands}.",
+        "option_project": "project",
+        "option_level": "level",
+        "option_question": "question",
+        "option_decision": "decision",
+        "option_statement": "statement",
+        "command_meeting_start": "start the meeting, from the call",
+        "command_meeting_project": "change the project, before the agent has said anything",
+        "command_meeting_end": "end the meeting and publish the minutes",
+        "command_ask": "ask the agent about the project",
+        "command_meeting_level": "how often the agent speaks up (silent, contradictions, context)",
+        "command_meeting_optout": "stop transcribing your voice",
+        "command_meeting_resume": "resume the last unfinished meeting",
+        "command_meeting_retry_publish": "publish the pull requests kept after a failure",
+        "command_decision_validate": "validate a proposed decision",
+        "command_decision_ignore": "ignore a proposed decision",
+        "command_decision_edit": "reword a proposed decision, then validate it",
+        "command_help": "list the commands",
         "answer": "{answer}\n\nSources: {sources}",
         "not_covered": "The KB does not cover this point.",
         "contradiction": "The KB says “{quote}” ({anchor}). {reason}",
         "already_rejected": "This was already rejected in the KB: “{quote}” ({anchor}). {reason}",
         "stale": " Note: this page was last verified on {date}.",
         "context": "Related KB page: {anchor}",
-        "decision_detected": "Decision detected: *{statement}*",
+        "decision_detected": "Decision {id} detected: *{statement}*",
         "decision_published": "Decision validated by {user}: {url}",
         "announce_searching": "🔎 Searching the KB: “{question}”",
         "announce_validating": (
@@ -30,6 +49,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "checks_resumed": "Checks resumed.",
         "agent_label": "{name} (AI)",
         "meeting_resumed": "Meeting resumed.",
+        "resume_offer": (
+            "A meeting on the {project} project was interrupted in this call: type `{resume}` "
+            "to resume it, or `{start}` again to start a new meeting."
+        ),
         "nothing_to_resume": "There is no unfinished meeting to resume.",
         "retry_publish_done": "Published {count} kept pull request(s): {urls}",
         "retry_publish_none": "Nothing to publish.",
@@ -66,6 +89,11 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "command_failed": "The command failed; details are in the agent's log.",
         "unknown_command": "Unknown command.",
+        "not_in_meeting": (
+            "Only the meeting's participants can do that: join its call or use its text channel."
+        ),
+        "unknown_decision": "No pending decision {decision}. Pending: {pending}.",
+        "no_pending_decision": "none",
         "transcription_lag": "Transcription is running {seconds} s behind.",
         "audio_interrupted": "Audio was interrupted from {start} to {end}.",
         "edit_title": "Edit the decision",
@@ -135,13 +163,32 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "minutes_gaps": "Transcription gaps",
     },
     "fr": {
+        "help_header": "Commandes (à taper dans le chat) :",
+        "decision_reply_hint": "Répondez {commands}.",
+        "option_project": "projet",
+        "option_level": "niveau",
+        "option_question": "question",
+        "option_decision": "décision",
+        "option_statement": "énoncé",
+        "command_meeting_start": "démarrer la réunion, depuis l'appel",
+        "command_meeting_project": "changer de projet, avant que l'agent ait parlé",
+        "command_meeting_end": "terminer la réunion et publier le compte rendu",
+        "command_ask": "poser une question sur le projet",
+        "command_meeting_level": "fréquence des interventions (silent, contradictions, context)",
+        "command_meeting_optout": "ne plus transcrire votre voix",
+        "command_meeting_resume": "reprendre la dernière réunion inachevée",
+        "command_meeting_retry_publish": "publier les pull requests gardées après un échec",
+        "command_decision_validate": "valider une décision proposée",
+        "command_decision_ignore": "ignorer une décision proposée",
+        "command_decision_edit": "reformuler une décision proposée, puis la valider",
+        "command_help": "lister les commandes",
         "answer": "{answer}\n\nSources : {sources}",
         "not_covered": "La KB ne couvre pas ce point.",
         "contradiction": "La KB indique « {quote} » ({anchor}). {reason}",
         "already_rejected": "Déjà écarté dans la KB : « {quote} » ({anchor}). {reason}",
         "stale": " Attention : page vérifiée pour la dernière fois le {date}.",
         "context": "Page de la KB liée : {anchor}",
-        "decision_detected": "Décision détectée : *{statement}*",
+        "decision_detected": "Décision {id} détectée : *{statement}*",
         "decision_published": "Décision validée par {user} : {url}",
         "announce_searching": "🔎 Je cherche dans la KB : « {question} »",
         "announce_validating": (
@@ -166,6 +213,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "checks_resumed": "Vérifications reprises.",
         "agent_label": "{name} (IA)",
         "meeting_resumed": "Réunion reprise.",
+        "resume_offer": (
+            "Une réunion sur le projet {project} a été interrompue dans cet appel : tapez "
+            "`{resume}` pour la reprendre, ou `{start}` à nouveau pour en commencer une nouvelle."
+        ),
         "nothing_to_resume": "Aucune réunion inachevée à reprendre.",
         "retry_publish_done": "{count} pull request(s) conservée(s) publiée(s) : {urls}",
         "retry_publish_none": "Rien à publier.",
@@ -204,6 +255,12 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "command_failed": "La commande a échoué ; le détail est dans le journal de l'agent.",
         "unknown_command": "Commande inconnue.",
+        "not_in_meeting": (
+            "Seuls les participants de la réunion peuvent faire cela : rejoignez son appel ou "
+            "utilisez son salon texte."
+        ),
+        "unknown_decision": "Aucune décision {decision} en attente. En attente : {pending}.",
+        "no_pending_decision": "aucune",
         "transcription_lag": "La transcription a {seconds} s de retard.",
         "audio_interrupted": "L'audio a été interrompu de {start} à {end}.",
         "edit_title": "Modifier la décision",

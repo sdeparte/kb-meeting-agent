@@ -271,7 +271,8 @@ class MeetingAgent:
             Button(f"decision:{decision_id}:edit", t(self._lang, "button_edit"), modal=edit),
             Button(f"decision:{decision_id}:ignore", t(self._lang, "button_ignore")),
         )
-        await self._say(t(self._lang, "decision_detected", statement=candidate.statement), buttons)
+        detected = t(self._lang, "decision_detected", id=decision_id, statement=candidate.statement)
+        await self._say(detected, buttons)
 
     async def _check(self, claim: Claim) -> None:
         subject = claim.subject.casefold().strip()
