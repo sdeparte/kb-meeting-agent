@@ -123,6 +123,8 @@ The connector is the process that joins meetings on a platform and relays audio,
 | `node` | `node` | Node.js 22.12+ executable, for the default `command` (refused with `command`) |
 | `dir` | `connector-<name>/` of this checkout | where the connector lives, for the default `command` (refused with `command`) |
 
+A connector that exits with code 78 refuses its `env` (`connector-discord` does when a variable below is missing): it is not restarted and `run` stops with an error. Any other exit is restarted with backoff.
+
 The connector receives `env`, `PATH`, `HOME`, the locale and temporary-folder variables, and the local connection details (`KBMA_CORE_URL`, `KBMA_SECRET`, which `env` cannot override): never model keys or repository tokens.
 
 `connector-discord` reads:

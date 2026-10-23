@@ -63,9 +63,13 @@ def _run(args: argparse.Namespace) -> int:
     )
     for noisy in ("httpx", "httpx2", "huggingface_hub"):  # one line per HTTP request otherwise
         logging.getLogger(noisy).setLevel(logging.WARNING)
-    from kb_meeting_agent.live.runner import run
+    from kb_meeting_agent.live.runner import ConnectorConfigError, run
 
-    asyncio.run(run(config))
+    try:
+        asyncio.run(run(config))
+    except ConnectorConfigError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     return 0
 
 

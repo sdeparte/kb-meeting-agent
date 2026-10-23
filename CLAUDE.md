@@ -27,7 +27,7 @@ uv run kb-meeting-agent run                               # live meetings (needs
 Two processes in live mode:
 
 - **A connector** (`connector-<name>/`; today `connector-discord/`, Node, discord.js): joins voice, receives per-speaker Opus, downsamples to 16 kHz mono PCM, relays slash commands/buttons/modals. It holds no meeting logic, and the core holds no platform logic: the `connector` config section gives its name, `env` (platform credentials, passed as is) and optional `command`.
-- **Python core** (`src/kb_meeting_agent/`): `live/runner.py` spawns the connector as a subprocess (own process group, restarted with backoff) and talks to it over a local WebSocket (`live/link.py`, shared-secret auth). The wire format — JSON messages plus binary audio frames (`>BQB` header: kind, timestamp, speaker id length, then the UTF-8 speaker id); every id is an opaque platform string — is defined in `live/protocol.py` and **mirrored by hand** in `connector-discord/src/protocol.js`; change both together and bump `PROTOCOL_VERSION` when incompatible.
+- **Python core** (`src/kb_meeting_agent/`): `live/runner.py` spawns the connector as a subprocess (own process group, restarted with backoff unless it exits with `CONFIG_ERROR_EXIT`, a refused env) and talks to it over a local WebSocket (`live/link.py`, shared-secret auth). The wire format — JSON messages plus binary audio frames (`>BQB` header: kind, timestamp, speaker id length, then the UTF-8 speaker id); every id is an opaque platform string — is defined in `live/protocol.py` and **mirrored by hand** in `connector-discord/src/protocol.js`; change both together and bump `PROTOCOL_VERSION` when incompatible.
 
 Core layering:
 
