@@ -193,6 +193,29 @@ async def test_a_stricter_secret_check_reindexes(tmp_path, code_origin, monkeypa
     repo.close()
 
 
+async def test_a_new_exclude_drops_files_without_reindexing(tmp_path, code_origin, monkeypatch):
+    from kb_meeting_agent.kb import code
+
+    repo = code_repo(tmp_path, code_origin)
+    await repo.sync()
+    repo.close()
+    read = []
+    original = code._read_source
+    monkeypatch.setattr(code, "_read_source", lambda path: read.append(path) or original(path))
+    config = RepoConfig(
+        repo="acme/back",
+        clone_url=str(code_origin),
+        tags=["CodeBase", "BackEnd"],
+        exclude=["lib/**"],
+    )
+    repo = GitCodeRepository("back", config, tmp_path / "back", FakeProvider().embed, "fake")
+    await repo.sync()
+    assert not repo.exists("lib/game/cooldown.dart")
+    assert repo.exists("src/Game/Relay/RelayConfigProvider.php")
+    assert read == []
+    repo.close()
+
+
 async def test_two_syncs_of_the_same_checkout_do_not_collide(tmp_path, code_origin):
     import asyncio
 

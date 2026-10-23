@@ -208,17 +208,10 @@ class GitCodeRepository(GitCheckout):
         return set(current), changed
 
     async def _reindex(self) -> None:
-        # Every selection rule is in the key: a stricter rule must drop files already indexed.
-        rules = repr(
-            (
-                DEFAULT_CODE_EXCLUDE,
-                SECRET_CONTENT.pattern,
-                MAX_CODE_FILE_BYTES,
-                self._config.include,
-                self._config.exclude,
-            )
-        )
-        key = hashlib.sha256((rules + self._embedding_model).encode()).hexdigest()
+        # Path rules (include, exclude, size) need no rebuild: a file they now skip is removed
+        # below, one they now let in is indexed. The secret check reads content, only of the
+        # changed files: a stricter one must re-read every file.
+        key = hashlib.sha256((SECRET_CONTENT.pattern + self._embedding_model).encode()).hexdigest()
         if self._index.get_meta("index_key") != key:
             self._index.clear()
             self._index.set_meta("index_key", key)
