@@ -54,6 +54,9 @@ class DryRunPublisher:
     async def open_pr_paths(self, prefix: str) -> list[str]:
         return []
 
+    async def aclose(self) -> None:
+        pass
+
 
 class LocalKeeper:
     """Keeps changes under directory/<branch>/ as DryRunPublisher writes them, plus the index
@@ -86,6 +89,7 @@ class FakePublisher:
         self.moved: set[str] = set()  # branches someone else pushed to
         self._open_paths = list(open_paths or [])
         self._closed = set(closed or ())
+        self.closed = False  # aclose was called
 
     async def open_pr(self, branch: str, files: dict[str, str], title: str, body: str) -> PrRef:
         self.prs.append((branch, files, title, body))
@@ -111,3 +115,6 @@ class FakePublisher:
         self.updates.append((branch, files, message))
         self.update_heads.append(expected_head)
         return f"{expected_head}+"
+
+    async def aclose(self) -> None:
+        self.closed = True

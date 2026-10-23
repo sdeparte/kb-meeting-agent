@@ -76,6 +76,10 @@ class Publisher(Protocol):
         """
         ...
 
+    async def aclose(self) -> None:
+        """Release the connections; the publisher is not used afterwards."""
+        ...
+
 
 class ChangeKeeper(Protocol):
     """Where a change goes when it cannot be published, so that it can be published later.
