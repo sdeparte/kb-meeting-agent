@@ -1,0 +1,18 @@
+{
+  "name": "kb-meeting-agent-connector-meet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Google Meet connector for kb-meeting-agent: joins the meetings its Google account is invited to and relays the chat.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=22.12" },
+  "scripts": {
+    "start": "node src/index.js",
+    "login": "node src/login.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ical.js": "^2.2.1",
+    "kbma-browser": "file:../connector-browser"
+  }
+}

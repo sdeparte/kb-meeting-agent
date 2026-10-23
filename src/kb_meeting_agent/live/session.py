@@ -701,12 +701,14 @@ class MeetingSession:
             await self._respond(msg, t("en", "no_meeting"))
             return
         m = self.meeting
-        user_id = msg["user"]["id"]
-        m.opted_out.add(user_id)
-        m.assembler.opt_out(user_id)
-        for path in (m.dir / "audio").glob(f"*-{speaker_file_id(user_id)}.wav"):
-            path.unlink(missing_ok=True)
-        await self.deps.link.send("optout", user_id=user_id)
+        user = msg["user"]
+        # `speaker_ids`: the audio ids the author may be, when the platform's chat only names them
+        for user_id in dict.fromkeys([user["id"], *user.get("speaker_ids", [])]):
+            m.opted_out.add(user_id)
+            m.assembler.opt_out(user_id)
+            for path in (m.dir / "audio").glob(f"*-{speaker_file_id(user_id)}.wav"):
+                path.unlink(missing_ok=True)
+            await self.deps.link.send("optout", user_id=user_id)
         self._save_state()
         await self._respond(msg, t(self._lang(), "optout_done"))
 

@@ -7,7 +7,7 @@ A library, not a connector: it is never started on its own. It holds what the co
 - `pcm.js`: float samples to the core's 16-bit PCM;
 - `commands.js`: the `!` line of a meeting command the connector types on its own (`!start`, `!fin`), from the catalog the core sends.
 
-Used by [connector-slack](../connector-slack/README.md). Each connector depends on it with `"kbma-browser": "file:../connector-browser"`; run `npm ci` here before installing a connector.
+Used by [connector-slack](../connector-slack/README.md) and [connector-meet](../connector-meet/README.md). Each connector depends on it with `"kbma-browser": "file:../connector-browser"`; run `npm ci` here before installing a connector.
 
 ```bash
 npm ci && npm test

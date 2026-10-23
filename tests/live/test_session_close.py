@@ -344,3 +344,19 @@ async def test_optout_deletes_the_audio_of_a_speaker_id_that_is_not_a_file_name(
         "message", command("meeting_optout", interaction="i2", user=(speaker, "Bob"))
     )
     assert [path.name for path in audio.glob("*.wav")] == ["00000-u1.wav"]
+
+
+async def test_optout_by_an_ambiguous_chat_name_deletes_the_audio_of_every_speaker_id(make_session):
+    session, link, *_ = make_session()
+    await start(session)
+    await speak(session, user="u1", name="Alice")
+    await speak(session, user="p2", name="Alex", start=3_000)
+    await speak(session, user="p3", name="Alex", start=5_000)
+    await session.settle()
+    audio = session.meeting.dir / "audio"
+    optout = command("meeting_optout", interaction="i2", user=("Alex", "Alex"))
+    optout["user"]["speaker_ids"] = ["p2", "p3"]
+    await session.on_event("message", optout)
+    assert [path.name for path in audio.glob("*.wav")] == ["00000-u1.wav"]
+    assert link.of("optout") == [{"user_id": "Alex"}, {"user_id": "p2"}, {"user_id": "p3"}]
+    assert session.meeting.opted_out == {"Alex", "p2", "p3"}

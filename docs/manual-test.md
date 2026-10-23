@@ -46,3 +46,23 @@ Setup: the app installed and invited into a test channel, the agent's account si
 - [ ] Remove the account from the huddle: the agent asks to be invited again; invite it back: the meeting goes on, with an "Audio was interrupted" notice. Remove it and leave it out: the minutes are published after `auto_leave_empty_minutes`.
 - [ ] `!optout`, then someone else speaks while the opted-out person starts talking: none of the opted-out person's words appear, under any name.
 - [ ] Sign the profile out (delete its folder): the log asks for `npm run login`, the connector does not restart faster than once a minute.
+
+## Google Meet
+
+Setup: the agent's Google account signed in with `npm run login`, its calendar adding invitations automatically, `connector: {name: meet, …}` as in [connector-meet/README.md](../connector-meet/README.md). Run first with `MEET_HEADLESS=false`.
+
+- [ ] The log shows `ready: watching the calendar for invited meetings`.
+- [ ] Invite the agent's address to a meeting starting in 3 minutes: it joins about a minute before, its microphone and camera off; admit it if asked.
+- [ ] The chat shows the notice with the project; `!aide` lists the commands.
+- [ ] Two people speak in turn: their names in `transcript.jsonl`, few "Unknown".
+- [ ] `!ask …`: the answer is in the chat, split if long.
+- [ ] A decision: the message ends with the commands to type; `!valider d1` publishes it, `!modifier d2 …` rewords then publishes.
+- [ ] `!projet <second>` before the agent speaks changes the project; after, it is refused.
+- [ ] `!optout` from the chat: that person's speech stops appearing.
+- [ ] Kill the connector (`pkill -f connector-meet`): the core restarts it, the agent rejoins the meeting still in progress and the meeting resumes.
+- [ ] `!fin`: the agent leaves, the minutes are published, and it does not come back to that meeting.
+- [ ] Do not admit it on another meeting: after `MEET_ADMISSION_TIMEOUT_SECONDS` the log says `not admitted to …` and it does not retry.
+- [ ] Decline an invitation from the agent's calendar: it does not join.
+- [ ] An invitation from an account outside `MEET_ALLOWED_ORGANIZERS`: it does not join.
+- [ ] Cut the agent's network for 10 s mid-meeting: it rejoins; then `!fin`: it does not come back.
+- [ ] Someone who typed `!optout` leaves and rejoins the call: their speech still does not appear (Meet gives them a new participant id).

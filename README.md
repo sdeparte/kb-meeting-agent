@@ -9,7 +9,7 @@ An agent that joins a voice meeting, listens, and works with a knowledge base (K
 
 Models are pluggable: Claude through the Anthropic API, or any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, mlx-lm) for a fully local setup.
 
-> **Status.** The agent joins Discord voice channels and, unofficially, Slack huddles (`kb-meeting-agent run`), and can replay a recorded transcript (`kb-meeting-agent replay`).
+> **Status.** The agent joins Discord voice channels and, unofficially, Slack huddles and Google Meet meetings (`kb-meeting-agent run`), and can replay a recorded transcript (`kb-meeting-agent replay`).
 
 ## Requirements
 
@@ -158,6 +158,7 @@ The core joins live meetings through a **connector**: a separate process that br
 |---|---|
 | Discord voice channels | [connector-discord](connector-discord/README.md) |
 | Slack huddles | [connector-slack](connector-slack/README.md) (unofficial: drives a dedicated account in a browser) |
+| Google Meet | [connector-meet](connector-meet/README.md) (unofficial: drives a dedicated account in a browser; joins from its calendar) |
 
 ### Configure transcription
 
@@ -239,6 +240,7 @@ uv run ruff check . && uv run ruff format --check .
 (cd connector-discord && npm test)
 (cd connector-browser && npm ci && npx playwright install chromium && npm test)
 (cd connector-slack && npm ci && npm test)
+(cd connector-meet && npm ci && npm test)
 ```
 
 ## License

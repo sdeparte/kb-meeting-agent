@@ -145,7 +145,7 @@ connector:
     DISCORD_GUILD_ID: "123456789012345678"
 ```
 
-`connector-slack` reads `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_AGENT_USER_ID`, `SLACK_WORKSPACE_URL`, `SLACK_BROWSER_PROFILE` and `SLACK_HEADLESS`: see [connector-slack/README.md](../connector-slack/README.md#3-configure).
+`connector-slack` reads `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_AGENT_USER_ID`, `SLACK_WORKSPACE_URL`, `SLACK_BROWSER_PROFILE` and `SLACK_HEADLESS`: see [connector-slack/README.md](../connector-slack/README.md#3-configure). `connector-meet` reads `MEET_CALENDAR_ICS_URL`, `MEET_AGENT_EMAIL`, `MEET_BROWSER_PROFILE`, `MEET_ALLOWED_ORGANIZERS`, `MEET_JOIN_EARLY_SECONDS`, `MEET_ADMISSION_TIMEOUT_SECONDS` and `MEET_HEADLESS`: see [connector-meet/README.md](../connector-meet/README.md#2-configure).
 
 ### `transcription`
 
