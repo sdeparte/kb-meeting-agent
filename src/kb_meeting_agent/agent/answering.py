@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from typing import Literal
+
+from pydantic import create_model
+
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_chunks
+from kb_meeting_agent.config import KNOWLEDGE_BASE
 from kb_meeting_agent.llm.base import LLMProvider, Schema, complete
 from kb_meeting_agent.models import Chunk
 from kb_meeting_agent.ports import KnowledgeBase
@@ -14,6 +19,19 @@ EXCERPTS_MAX_CHARS = 30000  # about 10k tokens: fits a 16k context (Ollama on th
 
 class Queries(Schema):
     queries: list[str]
+    code: bool
+    tags: list[str]
+
+
+def queries_model(free_tags: list[str]) -> type[Queries]:
+    """Queries whose `tags` can only name the project's free tags (a JSON schema enum)."""
+    if not free_tags:
+        return Queries
+    return create_model(
+        "Queries",
+        __base__=Queries,
+        tags=(list[Literal[tuple(free_tags)]], ...),  # type: ignore[valid-type]
+    )
 
 
 class Answer(Schema):
@@ -22,13 +40,20 @@ class Answer(Schema):
     sources: list[str]
 
 
-QUERIES_SYSTEM = """Rewrite the question into 1 to 3 short search queries for a keyword + semantic search over a knowledge base.
+QUERIES_SYSTEM = """Rewrite the question into 1 to 3 short search queries for a keyword + semantic search over a knowledge base and source code.
 When the glossary maps a name to a technical identifier, include both.
+{hints}
 GLOSSARY:
 {glossary}"""
 
-ANSWER_SYSTEM = """You answer a question asked during a meeting, using ONLY the knowledge base excerpts provided. Never use outside knowledge.
+CODE_HINT = """Set "code" to true only when the question is about the source code itself: which code handles something, how something is implemented, what the code does. Otherwise set it to false: the knowledge base alone is searched."""
+NO_CODE_HINT = """Set "code" to false."""
+TAGS_HINT = """When "code" is true, also list in "tags" the parts of the project the question is about, among: {tags}. Leave it empty otherwise, or when the question points at none."""
+NO_TAGS_HINT = """Leave "tags" empty."""
+
+ANSWER_SYSTEM = """You answer a question asked during a meeting, using ONLY the excerpts provided: knowledge base pages and, when present, source code (excerpts with a `tags` attribute). Never use outside knowledge.
 If the excerpts do not answer the question, set `covered` to false.
+When you use code, explain what the code does and say so ("the code does…"), separately from what the knowledge base says ("the KB says…"). Never copy more than two lines of code.
 List in `sources` the `source` attribute of every excerpt you used, copied exactly.
 When an item's status is not in production, say so.
 Answer in language "{language}", in at most 4 sentences."""
@@ -43,16 +68,27 @@ async def answer_question(
     context: str,
     language: str,
 ) -> str:
+    free_tags = kb.free_tags
+    hints = "\n".join(
+        (
+            CODE_HINT if kb.has_code else NO_CODE_HINT,
+            TAGS_HINT.format(tags=", ".join(free_tags)) if free_tags else NO_TAGS_HINT,
+        )
+    )
     planned = await complete(
         fast,
-        QUERIES_SYSTEM.format(glossary=kb.glossary() or "(none)"),
+        QUERIES_SYSTEM.format(hints=hints, glossary=kb.glossary() or "(none)"),
         f"RECENT TRANSCRIPT:\n{context}\n\nQUESTION:\n{question}",
-        Queries,
+        queries_model(free_tags),
     )
+    # Code is searched only when the question asks about it: its excerpts otherwise crowd the
+    # knowledge base out (a code repo's test fixture once answered a question on the roadmap).
+    only = () if planned.code else (KNOWLEDGE_BASE,)
+    prefer = tuple(tag for tag in planned.tags if tag in free_tags) if planned.code else ()
     chunks: list[Chunk] = []
     seen: set[tuple[str, str]] = set()
     for query in (planned.queries or [question])[:MAX_QUERIES]:
-        for chunk in await kb.search(query, k=5):
+        for chunk in await kb.search(query, k=5, prefer_tags=prefer, only_tags=only):
             key = (chunk.anchor, chunk.text)
             if key not in seen:
                 seen.add(key)
@@ -63,19 +99,36 @@ async def answer_question(
     answer = await complete(
         strong,
         ANSWER_SYSTEM.format(language=language),
-        f"QUESTION:\n{question}\n\nKB EXCERPTS:\n{format_chunks(chunks)}",
+        f"QUESTION:\n{question}\n\nEXCERPTS:\n{format_chunks(chunks)}",
         Answer,
     )
     if not answer.covered:
         return t(language, "not_covered")
-    anchors = {chunk.anchor for chunk in chunks}
-    sources = [source for source in answer.sources if source in anchors]
-    return t(
-        language,
-        "answer",
-        answer=answer.answer,
-        sources=", ".join(f"`{source}`" for source in sources) or "—",
-    )
+    cited = (_source_chunk(chunks, source) for source in answer.sources)
+    sources = dict.fromkeys(_cite(kb, chunk) for chunk in cited if chunk)
+    return t(language, "answer", answer=answer.answer, sources=", ".join(sources) or "—")
+
+
+def _source_chunk(chunks: list[Chunk], source: str) -> Chunk | None:
+    """The excerpt a source names. Small models often drop the end of the anchor (qwen3:8b
+    cites `back:src/x.php` for `back:src/x.php:12-70`): then the first excerpt of that file."""
+    for chunk in chunks:
+        if chunk.anchor == source:
+            return chunk
+    for chunk in chunks:
+        file = f"{chunk.repo}:{chunk.path}" if chunk.start_line is not None else chunk.path
+        if file == source:
+            return chunk
+    return None
+
+
+def _cite(kb: KnowledgeBase, chunk: Chunk) -> str:
+    """`anchor` for a KB page; `[Tag]` and the anchor linked to its lines for code."""
+    if chunk.start_line is None:
+        return f"`{chunk.anchor}`"
+    label = chunk.citation.removesuffix(f" {chunk.anchor}")
+    link = kb.link(chunk)
+    return f"`{label}` [{chunk.anchor}]({link})" if link else f"`{label}` `{chunk.anchor}`"
 
 
 def _with_sections(kb: KnowledgeBase, chunks: list[Chunk]) -> list[Chunk]:

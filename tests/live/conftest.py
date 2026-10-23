@@ -1,7 +1,7 @@
 import pytest
 
 from kb_meeting_agent.config import AppConfig
-from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
+from kb_meeting_agent.kb.project import build_sources
 from kb_meeting_agent.live.session import MeetingSession, SessionDeps
 from kb_meeting_agent.llm.fake import FAKE_DEFAULTS, FakeProvider
 from kb_meeting_agent.publish.local import FakePublisher
@@ -20,8 +20,16 @@ def make_session(tmp_path, kb_origin):
         publisher=None,
         agent=None,
         transcription=None,
+        code=None,  # clone URL of a `back` CodeBase repository added to the project
         **defaults,
     ):
+        repos = {"kb": {"repo": "acme/kb", "clone_url": str(kb_origin), "tags": ["KnowledgeBase"]}}
+        if code is not None:
+            repos["back"] = {
+                "repo": "acme/back",
+                "clone_url": code,
+                "tags": ["CodeBase", "BackEnd"],
+            }
         config = AppConfig.model_validate(
             {
                 "agent": agent or {"name": "Scribe"},
@@ -30,7 +38,7 @@ def make_session(tmp_path, kb_origin):
                     role: {"provider": "fake", "model": "fake"}
                     for role in ("fast", "strong", "embedding")
                 },
-                "knowledge_bases": {"test": {"repo": "acme/kb", "clone_url": str(kb_origin)}},
+                "projects": {"test": {"repos": repos}},
                 "defaults": {"auto_leave_empty_minutes": 0.001, **defaults},
                 "transcription": {
                     "live": {"provider": "fake", "model": "fake"},
@@ -54,8 +62,8 @@ def make_session(tmp_path, kb_origin):
             strong=strong,
             live_transcriber=live or FakeTranscriber(default="bonjour à tous"),
             final_transcriber=final,
-            make_kb=lambda name, cfg: GitMarkdownKnowledgeBase(
-                name, cfg, config.data_dir, FakeProvider().embed, "fake"
+            make_sources=lambda name, project: build_sources(
+                name, project, config.data_dir, FakeProvider().embed, "fake"
             ),
             make_publisher=lambda cfg: publisher,
             clock_ms=clock,

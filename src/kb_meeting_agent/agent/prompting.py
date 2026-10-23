@@ -16,6 +16,8 @@ def format_chunks(chunks: list[Chunk]) -> str:
     parts = []
     for chunk in chunks:
         attributes = f'source="{chunk.anchor}"'
+        if chunk.start_line is not None:
+            attributes += f' tags="{",".join(chunk.tags)}"'
         if chunk.status:
             attributes += f' status="{chunk.status}"'
         if chunk.verified_date:

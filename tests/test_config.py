@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from kb_meeting_agent.config import ConfigError, load_config
+from kb_meeting_agent.config import ConfigError, ProjectConfig, load_config
 
 CONFIG = """
 agent:
@@ -14,10 +14,17 @@ llm:
   fast: {{provider: openai-compatible, base_url: "http://localhost:11434/v1", model: qwen3:14b}}
   strong: {{provider: anthropic, model: claude-opus-5-5, api_key: "${{TEST_ANTHROPIC_KEY}}", effort: high}}
   embedding: {{provider: openai-compatible, base_url: "http://localhost:11434/v1", model: bge-m3}}
-knowledge_bases:
+projects:
   demo:
-    repo: acme/kb
-    token: "${{TEST_GITHUB_TOKEN}}"
+    repos:
+      kb:
+        repo: acme/kb
+        tags: [KnowledgeBase]
+        token: "${{TEST_GITHUB_TOKEN}}"
+      back:
+        repo: acme/back
+        tags: [CodeBase, BackEnd]
+        exclude: ["fixtures/**"]
 """
 
 
@@ -33,8 +40,11 @@ def test_load_config_substitutes_env_and_applies_defaults(tmp_path, monkeypatch)
     cfg = load_config(write(tmp_path, CONFIG.format(data_dir=tmp_path / "data")))
     assert cfg.llm.strong.api_key == "sk-test"
     assert cfg.llm.strong.effort == "high"
-    assert cfg.knowledge_bases["demo"].token == "ghp-test"
-    assert cfg.knowledge_bases["demo"].base_branch == "main"
+    name, kb = cfg.projects["demo"].knowledge_base
+    assert name == "kb" and kb.token == "ghp-test" and kb.base_branch == "main"
+    [(code_name, code)] = cfg.projects["demo"].code_repos
+    assert code_name == "back" and code.tags == ["CodeBase", "BackEnd"]
+    assert code.exclude == ["fixtures/**"]
     assert cfg.defaults.intervention_level == "contradictions"
     assert cfg.defaults.contradiction_min_confidence == 0.8
     assert cfg.agent.name == "Breach"
@@ -156,4 +166,47 @@ def test_an_empty_agent_name_is_rejected(tmp_path, monkeypatch, agent):
         "agent:\n  name: Breach\n  aliases: [brèche]\n", agent
     )
     with pytest.raises(ValidationError):
+        load_config(write(tmp_path, text))
+
+
+@pytest.mark.parametrize(
+    ("repos", "message"),
+    [
+        ({"a": {"repo": "x/a", "tags": ["CodeBase"]}}, "exactly one KnowledgeBase"),
+        (
+            {
+                "a": {"repo": "x/a", "tags": ["KnowledgeBase"]},
+                "b": {"repo": "x/b", "tags": ["KnowledgeBase"]},
+            },
+            "exactly one KnowledgeBase",
+        ),
+        ({"a": {"repo": "x/a", "tags": ["KnowledgeBase", "CodeBase"]}}, "both"),
+        (
+            {
+                "a": {"repo": "x/a", "tags": ["KnowledgeBase"]},
+                "b": {"repo": "x/b", "tags": ["BackEnd"]},
+            },
+            "KnowledgeBase or CodeBase",
+        ),
+        ({"a": {"repo": "x/a", "tags": ["KnowledgeBase"], "include": ["src/**"]}}, "include"),
+        ({"a": {"repo": "x/a", "tags": ["KnowledgeBase", "bad tag"]}}, "pattern"),
+        (
+            {
+                "a": {"repo": "x/a", "tags": ["KnowledgeBase"]},
+                "b": {"repo": "x/b", "tags": ["CodeBase"], "language": "fr"},
+            },
+            "language",
+        ),
+    ],
+)
+def test_project_rules(repos, message):
+    with pytest.raises(ValidationError, match=message):
+        ProjectConfig.model_validate({"repos": repos})
+
+
+def test_knowledge_bases_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
+    monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
+    text = CONFIG.format(data_dir=tmp_path) + "\nknowledge_bases: {}\n"
+    with pytest.raises(ValidationError, match="knowledge_bases"):
         load_config(write(tmp_path, text))

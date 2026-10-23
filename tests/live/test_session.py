@@ -11,7 +11,7 @@ from live.helpers import FakeLink, command, speak
 
 
 async def start(session, **options):
-    await session.on_event("message", command("meeting_start", kb="test", **options))
+    await session.on_event("message", command("meeting_start", project="test", **options))
 
 
 async def test_start_joins_posts_the_notice_and_replies(make_session):
@@ -19,24 +19,24 @@ async def test_start_joins_posts_the_notice_and_replies(make_session):
     await start(session)
     assert link.of("join") == [{"voice_channel_id": "v1", "text_channel_id": "t1"}]
     assert "acme/kb" in link.texts()[0] and "/meeting optout" in link.texts()[0]
-    assert link.of("reply")[-1]["text"] == "Meeting started with the test knowledge base."
+    assert link.of("reply")[-1]["text"] == "Meeting started with the test project."
     state = json.loads((session.meeting.dir / "state.json").read_text(encoding="utf-8"))
-    assert state["status"] == "active" and state["kb"] == "test"
+    assert state["status"] == "active" and state["project"] == "test"
 
 
-async def test_start_requires_a_voice_channel_and_a_known_kb(make_session):
+async def test_start_requires_a_voice_channel_and_a_known_project(make_session):
     session, link, *_ = make_session()
-    await session.on_event("message", command("meeting_start", voice=None, kb="test"))
-    await session.on_event("message", command("meeting_start", interaction="i2", kb="nope"))
+    await session.on_event("message", command("meeting_start", voice=None, project="test"))
+    await session.on_event("message", command("meeting_start", interaction="i2", project="nope"))
     replies = [r["text"] for r in link.of("reply")]
-    assert replies == ["Join a voice channel first.", "Unknown knowledge base. Available: test."]
+    assert replies == ["Join a voice channel first.", "Unknown project. Available: test."]
     assert session.meeting is None
 
 
 async def test_second_start_is_refused(make_session):
     session, link, *_ = make_session()
     await start(session)
-    await session.on_event("message", command("meeting_start", interaction="i2", kb="test"))
+    await session.on_event("message", command("meeting_start", interaction="i2", project="test"))
     assert link.of("reply")[-1]["text"] == "A meeting is already running."
 
 
@@ -276,7 +276,7 @@ async def test_the_answer_to_a_spoken_question_replies_to_its_announcement(make_
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
         }
     )
     strong = FakeProvider({"Answer": [{"covered": True, "answer": "45 s.", "sources": []}]})
@@ -296,3 +296,41 @@ async def test_each_meeting_gives_its_messages_ids_of_its_own():
     link = FakeLink()
     first, second = ConnectorSink(link, "t1"), ConnectorSink(link, "t2")
     assert await first.send(OutMessage("a")) != await second.send(OutMessage("b"))
+
+
+async def test_code_sync_runs_in_the_background(make_session, code_origin):
+    session, link, *_ = make_session(code=str(code_origin))
+    await start(session)
+    assert link.of("join")
+    await session.meeting.code_sync
+    assert any("Building the index of back" in text for text in link.texts())
+    assert session.meeting.kb.code_repos[0].indexed
+    hits = await session.meeting.kb.search("COOLDOWN_SECONDS", prefer_tags=("BackEnd",))
+    assert any(hit.repo == "back" for hit in hits)
+
+
+async def test_an_unavailable_code_repo_is_reported_once(make_session, tmp_path):
+    session, link, *_ = make_session(code=str(tmp_path / "nonexistent"))
+    await start(session)
+    await session.meeting.code_sync
+    assert sum("back repository is unavailable" in text for text in link.texts()) == 1
+    assert link.of("reply")[-1]["text"] == "Meeting started with the test project."
+
+
+async def test_closing_stops_the_code_sync(make_session, code_origin):
+    session, *_ = make_session(code=str(code_origin))
+    await start(session)
+    sync = session.meeting.code_sync
+    await session.close()
+    assert sync.done()
+
+
+async def test_closing_releases_the_project_sources(make_session, code_origin):
+    session, *_ = make_session(code=str(code_origin))
+    await start(session)
+    sources = session.meeting.kb
+    closed = []
+    original = sources.close
+    sources.close = lambda: closed.append(1) or original()
+    await session.close()
+    assert closed == [1]

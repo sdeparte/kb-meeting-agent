@@ -15,6 +15,7 @@ from kb_meeting_agent.agent.decisions import (
     INDEX_ROWS_FILE,
     Change,
     DecisionDraft,
+    RelatedCode,
     build_decision_change,
     draft_decision,
     existing_numbers,
@@ -33,7 +34,7 @@ from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.minutes import DecisionRecord, build_minutes_change, write_minutes
 from kb_meeting_agent.agent.prompting import format_segments
 from kb_meeting_agent.agent.transcript import Transcript
-from kb_meeting_agent.config import InterventionLevel
+from kb_meeting_agent.config import CODE_BASE, KNOWLEDGE_BASE, InterventionLevel
 from kb_meeting_agent.conventions import IndexConfig
 from kb_meeting_agent.kb.quote import quote_exists
 from kb_meeting_agent.llm.base import (
@@ -309,7 +310,7 @@ class MeetingAgent:
         last = self._last_context_at
         if last is not None and now - last < self.settings.context_min_interval_s:
             return
-        results = await self.kb.search(topic, k=1)
+        results = await self.kb.search(topic, k=1, only_tags=(KNOWLEDGE_BASE,))
         if results:
             self._last_context_at = now
             self._record("context", anchor=results[0].anchor)
@@ -420,7 +421,10 @@ class MeetingAgent:
 
     async def _draft_and_publish(self, decision: PendingDecision, user: str) -> None:
         conventions = self.kb.conventions.decisions
-        chunks = await self.kb.search(decision.statement, k=6)
+        # the KB alone, then a few code excerpts for related_code: code must not crowd the KB out
+        chunks = await self.kb.search(decision.statement, k=6, only_tags=(KNOWLEDGE_BASE,))
+        if self.kb.has_code:
+            chunks += await self.kb.search(decision.statement, k=3, only_tags=(CODE_BASE,))
         excerpt = format_segments(list(decision.excerpt))
         try:
             draft = await draft_decision(
@@ -437,7 +441,15 @@ class MeetingAgent:
             await self._say(t(self._lang, "decision_draft_failed"))
             return  # still pending: it can be validated again
         draft = draft.model_copy(
-            update={"related_pages": [p for p in draft.related_pages if self.kb.exists(p.path)]}
+            update={
+                "related_pages": [p for p in draft.related_pages if self.kb.exists(p.path)],
+                # an invented file, or one never indexed (secrets, generated code), is dropped
+                "related_code": [
+                    c
+                    for c in _code_files(draft.related_code)
+                    if self.kb.code_exists(c.repo, c.path)
+                ],
+            }
         )
         number = None
         if "{number" in conventions.filename:
@@ -490,6 +502,11 @@ class MeetingAgent:
             index_content=self._index_content(conventions.index),
             language=self._lang,
             excerpt_note=note,
+            code_links={
+                (item.repo, item.path): link
+                for item in draft.related_code
+                if (link := self.kb.link_file(item.repo, item.path))
+            },
         )
 
     async def refresh_decision_prs(self) -> None:
@@ -690,3 +707,13 @@ def _similar(a: str, b: str) -> bool:
 def _one_line(text: str, limit: int = 300) -> str:
     flat = " ".join(text.split())
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def _code_files(items: Sequence[RelatedCode]) -> list[RelatedCode]:
+    """The model's files without the parts of an excerpt's source small models leave in (its
+    `:12-70` lines, its `repo:` prefix), each file once."""
+    seen: dict[tuple[str, str], RelatedCode] = {}
+    for item in items:
+        path = re.sub(r":\d+-\d+$", "", item.path).removeprefix(f"{item.repo}:")
+        seen.setdefault((item.repo, path), item.model_copy(update={"path": path}))
+    return list(seen.values())

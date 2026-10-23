@@ -9,7 +9,7 @@ from pathlib import Path
 from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.transcript import Transcript, load_segments
 from kb_meeting_agent.config import load_config
-from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
+from kb_meeting_agent.kb.project import build_sources
 from kb_meeting_agent.llm.factory import build_provider
 from kb_meeting_agent.ports import OutMessage, Publisher
 from kb_meeting_agent.publish.github import GitHubPublisher
@@ -34,16 +34,21 @@ def main(argv: list[str] | None = None) -> int:
     replay = commands.add_parser("replay", help="replay a recorded transcript (JSONL)")
     replay.add_argument("transcript", type=Path)
     replay.add_argument("--config", type=Path, default=Path("config.yml"))
-    replay.add_argument("--kb", required=True, help="knowledge base name from the config")
+    replay.add_argument("--project", required=True, help="project name from the config")
     replay.add_argument("--out", type=Path, default=Path("replay-out"))
     replay.add_argument("--level", choices=["silent", "contradictions", "context"])
     replay.add_argument("--auto-validate", action="store_true", help="validate every decision")
     replay.add_argument("--publish", action="store_true", help="open real pull requests")
     live = commands.add_parser("run", help="join Discord meetings")
     live.add_argument("--config", type=Path, default=Path("config.yml"))
+    index = commands.add_parser("index", help="sync and index every repository of a project")
+    index.add_argument("--config", type=Path, default=Path("config.yml"))
+    index.add_argument("--project", required=True, help="project name from the config")
     args = parser.parse_args(argv)
     if args.command == "run":
         return _run(args)
+    if args.command == "index":
+        return asyncio.run(_index(args))
     return asyncio.run(_replay(args))
 
 
@@ -64,20 +69,51 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _replay(args: argparse.Namespace) -> int:
+async def _index(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    kb_config = config.knowledge_bases.get(args.kb)
-    if kb_config is None:
-        print(f"unknown knowledge base: {args.kb}", file=sys.stderr)
-        return 2
-    if args.publish and not kb_config.token:
-        print(f"--publish needs a token for knowledge base {args.kb}", file=sys.stderr)
+    project = config.projects.get(args.project)
+    if project is None:
+        print(f"unknown project: {args.project}", file=sys.stderr)
         return 2
     embedder = build_provider(config.llm.embedding)
-    kb = GitMarkdownKnowledgeBase(
-        args.kb, kb_config, config.data_dir, embedder.embed, config.llm.embedding.model
+    sources = build_sources(
+        args.project, project, config.data_dir, embedder.embed, config.llm.embedding.model
+    )
+    failed = False
+    try:
+        # One failing repository (git, or the embedding server) does not stop the others.
+        for repo in (sources.knowledge_base, *sources.code_repos):
+            try:
+                await repo.sync()
+                print(f"indexed {repo.name}: {repo.file_count} files")
+            except Exception as exc:
+                print(f"{repo.name}: {exc}", file=sys.stderr)
+                failed = True
+    finally:
+        sources.close()
+    return 1 if failed else 0
+
+
+async def _replay(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    project = config.projects.get(args.project)
+    if project is None:
+        print(f"unknown project: {args.project}", file=sys.stderr)
+        return 2
+    kb_name, kb_config = project.knowledge_base
+    if args.publish and not kb_config.token:
+        print(f"--publish needs a token for the {kb_name} repository", file=sys.stderr)
+        return 2
+    embedder = build_provider(config.llm.embedding)
+    kb = build_sources(
+        args.project, project, config.data_dir, embedder.embed, config.llm.embedding.model
     )
     await kb.sync()
+    for repo in kb.code_repos:
+        try:
+            await repo.sync()
+        except Exception as exc:
+            print(f"{repo.name}: {exc} (answers rely on the other sources)", file=sys.stderr)
     publisher: Publisher
     if args.publish:
         publisher = GitHubPublisher(kb_config.repo, kb_config.base_branch, kb_config.token)

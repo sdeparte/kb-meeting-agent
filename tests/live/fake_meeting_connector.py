@@ -22,7 +22,7 @@ async def main() -> None:
                     "type": "command",
                     "interaction_id": "i1",
                     "name": "meeting_start",
-                    "options": {"kb": "test"},
+                    "options": {"project": "test"},
                     "user": {"id": "u1", "name": "Alice"},
                     "text_channel_id": "t1",
                     "voice_channel_id": "v1",

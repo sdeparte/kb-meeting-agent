@@ -24,7 +24,7 @@ FAKE_DEFAULTS: dict[str, object] = {
     "Extraction": {"claims": [], "decisions": [], "topics": []},
     "AddressedIntent": {"kind": "other", "question": "", "level": "none"},
     "Summary": {"summary": ""},
-    "Queries": {"queries": []},
+    "Queries": {"queries": [], "code": False, "tags": []},
     "Answer": {"covered": False, "answer": "", "sources": []},
     "Verdict": {
         "verdict": "not_covered",
@@ -41,6 +41,7 @@ FAKE_DEFAULTS: dict[str, object] = {
         "decision": "",
         "consequences": "",
         "related_pages": [],
+        "related_code": [],
     },
     "SliceSummary": {"summary": ""},
     "MinutesContent": {

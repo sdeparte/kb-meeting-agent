@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS chunks (
     text TEXT NOT NULL,
     status TEXT,
     verified_date TEXT,
-    vector BLOB NOT NULL
+    vector BLOB NOT NULL,
+    start_line INTEGER,
+    end_line INTEGER
 );
 CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
@@ -35,6 +37,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
 
 
 def embedding_text(chunk: Chunk) -> str:
+    if chunk.start_line is not None:
+        return f"{chunk.anchor}\n{chunk.text}"
     return f"{chunk.path} > {' > '.join(chunk.headings)}\n{chunk.text}"
 
 
@@ -43,7 +47,14 @@ class SearchIndex:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(path)
         self._db.executescript(_SCHEMA)
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(chunks)")}
+        for column in ("start_line", "end_line"):
+            if column not in columns:  # index files created before code repositories
+                self._db.execute(f"ALTER TABLE chunks ADD COLUMN {column} INTEGER")
+        self._db.commit()
         self._embed = embed
+        self._vectors: tuple[list[int], np.ndarray] | None = None  # ids, normalised rows
+        self._vectors_version = 0  # PRAGMA data_version they were loaded at
 
     def close(self) -> None:
         self._db.close()
@@ -61,6 +72,7 @@ class SearchIndex:
         self._db.commit()
 
     def clear(self) -> None:
+        self._vectors = None
         self._db.executescript("DELETE FROM files; DELETE FROM chunks; DELETE FROM chunks_fts;")
         self._db.commit()
 
@@ -68,6 +80,7 @@ class SearchIndex:
         return dict(self._db.execute("SELECT path, hash FROM files"))
 
     def remove_file(self, path: str) -> None:
+        self._vectors = None
         ids = [row[0] for row in self._db.execute("SELECT id FROM chunks WHERE path = ?", (path,))]
         self._db.executemany("DELETE FROM chunks_fts WHERE rowid = ?", [(i,) for i in ids])
         self._db.execute("DELETE FROM chunks WHERE path = ?", (path,))
@@ -80,8 +93,9 @@ class SearchIndex:
         self.remove_file(path)
         for chunk, text, vector in zip(chunks, texts, vectors, strict=True):
             cursor = self._db.execute(
-                "INSERT INTO chunks(path, headings, text, status, verified_date, vector) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks"
+                "(path, headings, text, status, verified_date, vector, start_line, end_line) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     chunk.path,
                     json.dumps(list(chunk.headings), ensure_ascii=False),
@@ -89,6 +103,8 @@ class SearchIndex:
                     chunk.status,
                     chunk.verified_date,
                     np.asarray(vector, dtype=np.float32).tobytes(),
+                    chunk.start_line,
+                    chunk.end_line,
                 ),
             )
             self._db.execute(
@@ -96,6 +112,7 @@ class SearchIndex:
             )
         self._db.execute("INSERT INTO files(path, hash) VALUES (?, ?)", (path, digest))
         self._db.commit()
+        self._vectors = None
 
     async def search(self, query: str, k: int = 8, boost_paths: Iterable[str] = ()) -> list[Chunk]:
         lexical = self._lexical(query, limit=k * 4)
@@ -112,7 +129,8 @@ class SearchIndex:
         for chunk_id, row in rows.items():
             if row.path in boosted:
                 scores[chunk_id] *= AUTHORITATIVE_BOOST
-        top = sorted(scores, key=lambda chunk_id: scores[chunk_id], reverse=True)[:k]
+        # an id missing from rows was removed during the embedding await (a resync)
+        top = sorted(rows, key=lambda chunk_id: scores[chunk_id], reverse=True)[:k]
         return [rows[chunk_id] for chunk_id in top]
 
     def section(self, path: str, headings: tuple[str, ...], text: str) -> list[Chunk]:
@@ -152,22 +170,29 @@ class SearchIndex:
         ]
 
     def _semantic(self, query_vector: list[float], limit: int) -> list[int]:
-        rows = self._db.execute("SELECT id, vector FROM chunks").fetchall()
-        if not rows:
-            return []
-        ids = [row[0] for row in rows]
-        matrix = np.stack([np.frombuffer(row[1], dtype=np.float32) for row in rows])
+        # loaded once, until the index changes here or in another connection to the same file
+        version = self._db.execute("PRAGMA data_version").fetchone()[0]
+        if self._vectors is None or version != self._vectors_version:
+            self._vectors_version = version
+            rows = self._db.execute("SELECT id, vector FROM chunks").fetchall()
+            if not rows:
+                self._vectors = None
+                return []
+            matrix = np.stack([np.frombuffer(row[1], dtype=np.float32) for row in rows])
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            self._vectors = ([row[0] for row in rows], matrix / np.where(norms == 0, 1.0, norms))
+        ids, matrix = self._vectors
         query = np.asarray(query_vector, dtype=np.float32)
-        norms = np.linalg.norm(matrix, axis=1) * (np.linalg.norm(query) or 1.0)
-        similarities = (matrix @ query) / np.where(norms == 0, 1.0, norms)
+        similarities = matrix @ (query / (np.linalg.norm(query) or 1.0))
         order = np.argsort(-similarities)[:limit]
         return [ids[i] for i in order]
 
     def _rows(self, ids: list[int]) -> dict[int, Chunk]:
         placeholders = ",".join("?" * len(ids))
         result: dict[int, Chunk] = {}
-        for chunk_id, path, headings, text, status, verified in self._db.execute(
-            "SELECT id, path, headings, text, status, verified_date FROM chunks "
+        for chunk_id, path, headings, text, status, verified, start, end in self._db.execute(
+            "SELECT id, path, headings, text, status, verified_date, start_line, end_line "
+            "FROM chunks "
             f"WHERE id IN ({placeholders})",
             ids,
         ):
@@ -177,5 +202,7 @@ class SearchIndex:
                 text=text,
                 status=status,
                 verified_date=verified,
+                start_line=start,
+                end_line=end,
             )
         return result

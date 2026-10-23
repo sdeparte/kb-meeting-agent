@@ -47,10 +47,16 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "it is deleted. The minutes and the validated decisions will be proposed as pull "
             "requests in {repo}. Use /meeting optout to stop transcribing your voice."
         ),
-        "meeting_started": "Meeting started with the {kb} knowledge base.",
+        "meeting_started": "Meeting started with the {project} project.",
         "meeting_already_running": "A meeting is already running.",
         "join_voice_first": "Join a voice channel first.",
-        "unknown_kb": "Unknown knowledge base. Available: {names}.",
+        "unknown_project": "Unknown project. Available: {names}.",
+        "code_index_building": (
+            "Building the index of {repo}: answers about its code will improve once it is ready."
+        ),
+        "code_repo_unavailable": (
+            "The {repo} repository is unavailable: answers rely on the other sources."
+        ),
         "no_meeting": "No meeting is running.",
         "meeting_ending": "Ending the meeting: writing the minutes…",
         "meeting_already_ending": "The meeting is already ending.",
@@ -96,6 +102,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "## Pages that may need an update\n\n{related}\n"
         ),
         "no_related_pages": "None identified.",
+        "decision_pr_code": "\n## Code files that may be affected\n\n{items}\n",
         "minutes_pr_title": "Minutes: {title}",
         "minutes_pr_body": "Minutes of the meeting of {date}. Participants: {participants}.",
         "someone": "Someone",
@@ -177,10 +184,17 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "seront proposés en pull request dans {repo}. Utilisez /meeting optout pour ne plus "
             "être transcrit."
         ),
-        "meeting_started": "Réunion démarrée avec la base de connaissances {kb}.",
+        "meeting_started": "Réunion démarrée avec le projet {project}.",
         "meeting_already_running": "Une réunion est déjà en cours.",
         "join_voice_first": "Rejoignez d'abord un salon vocal.",
-        "unknown_kb": "Base de connaissances inconnue. Disponibles : {names}.",
+        "unknown_project": "Projet inconnu. Disponibles : {names}.",
+        "code_index_building": (
+            "Construction de l'index de {repo} : les réponses sur son code s'amélioreront "
+            "une fois l'index prêt."
+        ),
+        "code_repo_unavailable": (
+            "Le dépôt {repo} est indisponible : les réponses s'appuient sur les autres sources."
+        ),
         "no_meeting": "Aucune réunion en cours.",
         "meeting_ending": "Clôture de la réunion : rédaction du compte rendu…",
         "meeting_already_ending": "La réunion est déjà en cours de clôture.",
@@ -227,6 +241,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "## Pages qui semblent concernées\n\n{related}\n"
         ),
         "no_related_pages": "Aucune identifiée.",
+        "decision_pr_code": "\n## Fichiers de code qui semblent concernés\n\n{items}\n",
         "minutes_pr_title": "Compte rendu : {title}",
         "minutes_pr_body": "Compte rendu de la réunion du {date}. Participants : {participants}.",
         "someone": "Quelqu'un",

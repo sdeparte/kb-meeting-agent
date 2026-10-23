@@ -25,6 +25,7 @@ DRAFT = {
         {"path": "reference/configuration.md", "section": "Neutralization", "reason": "value"},
         {"path": "nope.md", "section": "X", "reason": "invented"},
     ],
+    "related_code": [],
 }
 VERDICT = {
     "verdict": "contradicts",
@@ -106,7 +107,7 @@ async def test_decision_is_proposed_then_published_on_button(make_agent):
 
 async def test_unlisted_scope_publishes_nothing_and_keeps_the_decision_pending(make_agent, kb):
     decisions = kb.conventions.decisions.model_copy(update={"scopes": ["client", "serveur"]})
-    kb._conventions = kb.conventions.model_copy(update={"decisions": decisions})
+    kb.knowledge_base._conventions = kb.conventions.model_copy(update={"decisions": decisions})
     fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
     strong = FakeProvider({"DecisionDraft": [DRAFT, DRAFT]})  # "backend", twice
     agent, _, _, publisher, sink = make_agent(fast, strong)
@@ -177,7 +178,7 @@ async def test_addressed_question_is_answered(make_agent):
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
         }
     )
     strong = FakeProvider(
@@ -221,7 +222,7 @@ async def test_an_announcement_is_answered_whatever_the_failure(make_agent, monk
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
         }
     )
     agent, *_, sink = make_agent(fast, extraction_interval_s=1000)
@@ -244,7 +245,7 @@ async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
         }
     )
     strong = FakeProvider(
@@ -268,6 +269,29 @@ async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
         "Decision validated by Bob: https://example.test/pull/1",
         "Checks resumed.",
     ]
+
+
+async def test_an_embedding_outage_pauses_the_checks_instead_of_finding_nothing(
+    make_agent, kb, monkeypatch
+):
+    async def down(texts):
+        raise LLMUnavailable("embedding server down")
+
+    monkeypatch.setattr(kb.knowledge_base._index, "_embed", down)
+    fast = FakeProvider(
+        {
+            "Extraction": [extraction()],
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
+        }
+    )
+    agent, *_, sink = make_agent(fast)
+    await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
+    texts = sink.texts()
+    assert any(text.startswith("Checks paused") for text in texts)
+    assert not any("does not cover" in text for text in texts)
 
 
 async def test_voice_commands(make_agent):
@@ -519,7 +543,7 @@ async def test_edit_button_carries_a_modal_and_modal_submit_validates(make_agent
 
 
 async def test_set_level_and_ask(make_agent):
-    fast = FakeProvider({"Queries": [{"queries": ["cooldown"]}]})
+    fast = FakeProvider({"Queries": [{"queries": ["cooldown"], "code": False, "tags": []}]})
     strong = FakeProvider(
         {
             "Answer": [
@@ -629,7 +653,7 @@ async def test_a_spoken_question_and_its_answer_are_recorded(make_agent):
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
         }
     )
     strong = FakeProvider(
@@ -728,3 +752,77 @@ async def test_exchanges_are_recorded_in_the_kb_language(make_agent, kb, kb_orig
     await agent.on_segment(seg(0, "hello"))
     await agent.set_level("silent", announce=False, user="Carol")
     assert lines(agent) == ["Carol a réglé Scribe (IA) sur le niveau `silent`"]
+
+
+async def test_context_links_point_at_the_kb_only(make_agent, sources):
+    searched = []
+    search = sources.search
+
+    async def spy(query, k=8, prefer_tags=(), only_tags=()):
+        searched.append(only_tags)
+        return await search(query, k, prefer_tags, only_tags)
+
+    sources.search = spy
+    fast = FakeProvider({"Extraction": [extraction(topics=["RelayConfigProvider"])]})
+    agent, _, _, _, sink = make_agent(fast, level="context")
+    agent.kb = sources
+    await agent.on_segment(seg(0, "on regarde RelayConfigProvider"))
+    assert searched == [("KnowledgeBase",)]
+    assert sink.messages and "back:" not in sink.texts()[-1]
+
+
+async def test_invented_code_files_are_dropped(make_agent, sources):
+    draft = DRAFT | {
+        "related_code": [
+            {"repo": "back", "path": "lib/game/cooldown.dart", "reason": "value"},
+            {"repo": "back", "path": "lib/game/invented.dart", "reason": "invented"},
+            {"repo": "back", "path": ".env", "reason": "secret"},
+        ]
+    }
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [draft]})
+    agent, _, _, publisher, _ = make_agent(fast, strong)
+    agent.kb = sources
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    body = publisher.prs[0][3]
+    assert "## Code files that may be affected" in body
+    assert "https://github.com/acme/back/blob/main/lib/game/cooldown.dart" in body
+    assert "invented.dart" not in body and ".env" not in body
+
+
+async def test_a_decision_is_drafted_from_the_kb_first_then_a_little_code(make_agent, sources):
+    searched = []
+    search = sources.search
+
+    async def spy(query, k=8, prefer_tags=(), only_tags=()):
+        searched.append((k, only_tags))
+        return await search(query, k, prefer_tags, only_tags)
+
+    sources.search = spy
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [DRAFT]})
+    agent, _, _, publisher, _ = make_agent(fast, strong)
+    agent.kb = sources
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    assert searched == [(6, ("KnowledgeBase",)), (3, ("CodeBase",))]
+    assert len(publisher.prs) == 1
+
+
+async def test_a_code_file_cited_with_its_lines_or_repo_is_kept(make_agent, sources):
+    draft = DRAFT | {
+        "related_code": [
+            {"repo": "back", "path": "lib/game/cooldown.dart:1-1", "reason": "lines left in"},
+            {"repo": "back", "path": "back:lib/game/cooldown.dart", "reason": "repo left in"},
+        ]
+    }
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [draft]})
+    agent, _, _, publisher, _ = make_agent(fast, strong)
+    agent.kb = sources
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    body = publisher.prs[0][3]
+    assert body.count("[lib/game/cooldown.dart](https://github.com/acme/back/blob/main/") == 1
+    assert ":1-1" not in body and "back:lib" not in body

@@ -2,9 +2,9 @@
 
 An agent that joins a voice meeting, listens, and works with a knowledge base (KB) of Markdown files in a Git repository:
 
-- answers questions about the KB when someone addresses it;
+- answers questions about the KB when someone addresses it, and questions about the project's code ("which code handles…?") when you give it the code repositories;
 - flags statements that contradict the KB, quoting the KB line verbatim;
-- detects decisions, asks the participants to validate them, and opens one pull request per decision;
+- detects decisions, asks the participants to validate them, and opens one pull request per decision, listing the KB pages and code files it probably affects;
 - opens a pull request with detailed minutes at the end of the meeting.
 
 Models are pluggable: Claude through the Anthropic API, or any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, mlx-lm) for a fully local setup.
@@ -93,7 +93,15 @@ export ANTHROPIC_API_KEY=...       # if you use Claude
 export GITHUB_TOKEN=...            # required by the example's `token:` line; remove that line for a dry run on a public KB
 ```
 
-Declare your KB under `knowledge_bases` (`repo: owner/name`). Values written as `${VAR}` are read from the environment. Every option is described in [docs/configuration.md](docs/configuration.md).
+Declare a project under `projects`: its KB repository, tagged `KnowledgeBase`, and optionally code repositories, tagged `CodeBase` plus a tag of your choice (`FrontEnd`, `BackEnd`…). Values written as `${VAR}` are read from the environment. Every option is described in [docs/configuration.md](docs/configuration.md).
+
+A code repository needs only a read-only token (Contents: read), and only when it is private. Index it once before the first meeting, which can take a while on a large repository:
+
+```bash
+uv run kb-meeting-agent index --project my-project
+```
+
+**Upgrading from `knowledge_bases`.** Each former entry becomes a project with one repository tagged `KnowledgeBase`. Before upgrading, close or `/meeting retry-publish` every pending meeting: meetings saved by the previous version can neither be resumed nor republished. The KB is cloned and indexed again under `projects/`; the former `<data_dir>/kb/` directory can then be deleted.
 
 ### 5. Describe your KB's conventions (optional)
 
@@ -102,15 +110,15 @@ Add a `.meeting-agent.yml` at the root of the KB repository to tell the agent it
 ## Replay a meeting
 
 ```bash
-uv run kb-meeting-agent replay examples/transcript.jsonl --kb my-kb
+uv run kb-meeting-agent replay examples/transcript.jsonl --project my-project
 ```
 
-The agent clones (or updates) the KB, indexes it, then feeds the transcript to the agent segment by segment. Its messages are printed with an `[agent]` prefix, and decision buttons are shown with their ids.
+The agent clones (or updates) the project's repositories, indexes them, then feeds the transcript to the agent segment by segment. Its messages are printed with an `[agent]` prefix, and decision buttons are shown with their ids.
 
 | Option | Effect |
 |---|---|
 | `--config PATH` | configuration file (default `config.yml`) |
-| `--kb NAME` | knowledge base to use, as named in `config.yml` (required) |
+| `--project NAME` | project to use, as named in `config.yml` (required) |
 | `--out DIR` | output directory (default `replay-out/`) |
 | `--level silent\|contradictions\|context` | how often the agent speaks up on its own (default from `config.yml`) |
 | `--auto-validate` | validate every detected decision, to see the decision records it would open |
@@ -180,8 +188,8 @@ The agent registers its slash commands on the server, starts the connector and r
 
 | Command | Effect |
 |---|---|
-| `/meeting start kb:<name> [level]` | joins your voice channel and posts the recording notice |
-| `/ask <question>` | answers from the KB |
+| `/meeting start project:<name> [level]` | joins your voice channel and posts the recording notice |
+| `/ask <question>` | answers from the KB (and the code, for questions about it) |
 | `/meeting level <level>` | `silent`, `contradictions` or `context` |
 | `/meeting optout` | stops transcribing your voice |
 | `/meeting end` | writes the minutes and opens the pull requests |
@@ -210,9 +218,10 @@ Meeting folders live in `<data_dir>/meetings/<date>-<id>/`.
 
 ## How it behaves
 
-- **Answers** use only KB excerpts and cite them as `path#section`; when the KB does not cover the question, the agent says so.
+- **Answers** use only excerpts of the project's repositories. KB pages are cited as `path#section`, code as `[Tag] repo:path:start-end` with a link to those lines on GitHub; the agent tells what the code does apart from what the KB says. When nothing covers the question, it says so.
+- **Code** is read only: it is never used to contradict a statement, and the agent never writes to a code repository.
 - **Contradictions** are posted only when the model is confident, when the quoted line really exists in the cited file, and once per subject. The agent shows the full KB line, says "the KB says…" rather than "this is wrong", and warns when the page has not been verified recently.
-- **Decisions** are proposed with Validate / Edit / Ignore buttons; in a live meeting they can also be validated by voice (Edit needs a live connector: it does nothing in replay). A validated decision becomes a pull request with the record, the transcript lines it comes from (labelled as context when the exact line could not be found), and the KB pages that probably need an update (not modified). If publishing fails, the files are kept under `unpublished/`.
+- **Decisions** are proposed with Validate / Edit / Ignore buttons; in a live meeting they can also be validated by voice (Edit needs a live connector: it does nothing in replay). A validated decision becomes a pull request with the record, the transcript lines it comes from (labelled as context when the exact line could not be found), the KB pages that probably need an update (not modified), and the code files it probably requires changing. If publishing fails, the files are kept under `unpublished/`.
 - **Minutes** are written at the end in two passes (summaries of 10-minute slices, then a synthesis) and published as a pull request. The full transcript is never published; decision pull requests quote only the relevant lines, with speaker and time.
 
 ## Development

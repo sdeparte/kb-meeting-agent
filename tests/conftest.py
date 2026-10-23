@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from kb_meeting_agent.config import KbConfig
+from kb_meeting_agent.config import RepoConfig
+from kb_meeting_agent.kb.code import GitCodeRepository
+from kb_meeting_agent.kb.project import ProjectSources
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
 from kb_meeting_agent.llm.fake import FakeProvider
 
@@ -107,12 +109,53 @@ def kb_origin(tmp_path) -> Path:
     return make_kb_repo(tmp_path / "origin")
 
 
+CODE_FILES = {
+    "src/Game/Relay/RelayConfigProvider.php": (
+        "<?php\n\nfinal class RelayConfigProvider\n{\n    public const COOLDOWN_SECONDS = 30;\n}\n"
+    ),
+    "lib/game/cooldown.dart": "const kCooldown = Duration(seconds: 30);\n",
+    ".env": "SECRET=1\n",
+}
+
+
 @pytest.fixture
-async def kb(tmp_path, kb_origin):
-    config = KbConfig(repo="acme/kb", clone_url=str(kb_origin))
+def code_origin(tmp_path) -> Path:
+    return make_kb_repo(tmp_path / "code-origin", CODE_FILES)
+
+
+@pytest.fixture
+async def kb_repo(tmp_path, kb_origin):
+    config = RepoConfig(repo="acme/kb", clone_url=str(kb_origin), tags=["KnowledgeBase"])
     knowledge_base = GitMarkdownKnowledgeBase(
-        "test", config, tmp_path / "data", FakeProvider().embed, embedding_model="fake"
+        "kb", config, tmp_path / "data", FakeProvider().embed, embedding_model="fake"
     )
     await knowledge_base.sync()
     yield knowledge_base
     knowledge_base.close()
+
+
+@pytest.fixture
+def kb(kb_repo):
+    """The `kb_repo` knowledge base alone, behind the agent's KnowledgeBase port."""
+    return ProjectSources(kb_repo, "kb", ("KnowledgeBase",), [], links={})
+
+
+@pytest.fixture
+async def sources(tmp_path, kb_repo, code_origin):
+    """The `kb` fixture plus a `back` code repository (CodeBase, BackEnd)."""
+    back = GitCodeRepository(
+        "back",
+        RepoConfig(repo="acme/back", clone_url=str(code_origin), tags=["CodeBase", "BackEnd"]),
+        tmp_path / "back",
+        FakeProvider().embed,
+        "fake",
+    )
+    await back.sync()
+    yield ProjectSources(
+        kb_repo,
+        "kb",
+        ("KnowledgeBase",),
+        [back],
+        links={"back": "https://github.com/acme/back/blob/main"},
+    )
+    back.close()

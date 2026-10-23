@@ -20,7 +20,7 @@ class FailingPublisher(FakePublisher):
 
 
 async def start(session):
-    await session.on_event("message", command("meeting_start", kb="test"))
+    await session.on_event("message", command("meeting_start", project="test"))
 
 
 async def test_close_publishes_minutes_leaves_and_deletes_audio(make_session):
@@ -154,12 +154,12 @@ async def test_expired_meetings_are_deleted(make_session):
     closed_dir = session.meeting.dir
     await session.close()
     await session.on_event(
-        "message", command("meeting_start", interaction="i2", kb="test", voice="v2")
+        "message", command("meeting_start", interaction="i2", project="test", voice="v2")
     )
     abandoned_dir = session.meeting.dir
     fresh, _, fresh_clock, _ = make_session()
     fresh_clock.now = 31 * 86_400_000
-    await fresh.on_event("message", command("meeting_start", interaction="i3", kb="test"))
+    await fresh.on_event("message", command("meeting_start", interaction="i3", project="test"))
     assert not closed_dir.exists() and not abandoned_dir.exists()
     assert fresh.meeting.dir.exists()
 
@@ -259,7 +259,7 @@ async def test_a_failed_close_frees_the_session(make_session):
     state = json.loads((meeting.dir / "state.json").read_text(encoding="utf-8"))
     assert state["status"] == "failed"  # not offered to /meeting resume
     assert any((meeting.dir / "audio").iterdir())
-    await session.on_event("message", command("meeting_start", interaction="i2", kb="test"))
+    await session.on_event("message", command("meeting_start", interaction="i2", project="test"))
     assert session.meeting is not None and session.meeting.dir != meeting.dir
 
 

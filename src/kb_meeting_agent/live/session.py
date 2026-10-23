@@ -17,13 +17,14 @@ from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
 from kb_meeting_agent.agent.transcript import Transcript
-from kb_meeting_agent.config import AppConfig, KbConfig, TranscriptionConfig
+from kb_meeting_agent.config import AppConfig, ProjectConfig, RepoConfig, TranscriptionConfig
+from kb_meeting_agent.kb.project import ProjectSources
 from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler
 from kb_meeting_agent.live.pipeline import TranscriptionPipeline
 from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.base import LLMProvider
 from kb_meeting_agent.models import Segment
-from kb_meeting_agent.ports import OutMessage, PrRef, Publisher, SyncableKnowledgeBase
+from kb_meeting_agent.ports import OutMessage, PrRef, Publisher
 from kb_meeting_agent.transcription.base import (
     HallucinationFilter,
     Transcriber,
@@ -93,8 +94,8 @@ class SessionDeps:
     strong: LLMProvider
     live_transcriber: Transcriber
     final_transcriber: Transcriber | None
-    make_kb: Callable[[str, KbConfig], SyncableKnowledgeBase]
-    make_publisher: Callable[[KbConfig], Publisher]
+    make_sources: Callable[[str, ProjectConfig], ProjectSources]
+    make_publisher: Callable[[RepoConfig], Publisher]
     clock_ms: Callable[[], int] = field(default=lambda: int(time.time() * 1000))
     today: Callable[[], date] = date.today
 
@@ -103,8 +104,8 @@ class SessionDeps:
 class ActiveMeeting:
     id: str
     dir: Path
-    kb_name: str
-    kb: SyncableKnowledgeBase
+    project: str
+    kb: ProjectSources
     publisher: Publisher
     voice_channel_id: str
     text_channel_id: str
@@ -126,6 +127,7 @@ class ActiveMeeting:
     closing: bool = False
     voice_ready: asyncio.Event = field(default_factory=asyncio.Event)
     joiner: asyncio.Task[None] | None = None
+    code_sync: asyncio.Task[None] | None = None
 
     @property
     def lang(self) -> str:
@@ -406,18 +408,19 @@ class MeetingSession:
         if not msg.get("voice_channel_id"):
             await self._reply(msg, t("en", "join_voice_first"))
             return
-        kb_name = msg["options"].get("kb")
-        kb_config = self.deps.config.knowledge_bases.get(kb_name or "")
-        if kb_config is None:
-            names = ", ".join(sorted(self.deps.config.knowledge_bases))
-            await self._reply(msg, t("en", "unknown_kb", names=names))
+        project = msg["options"].get("project") or ""
+        project_config = self.deps.config.projects.get(project)
+        if project_config is None:
+            names = ", ".join(sorted(self.deps.config.projects))
+            await self._reply(msg, t("en", "unknown_project", names=names))
             return
         self._purge_expired()
-        kb = self.deps.make_kb(kb_name, kb_config)
-        await kb.sync()
+        _, kb_config = project_config.knowledge_base
+        kb = self.deps.make_sources(project, project_config)
+        await self._sync_or_close(kb)
         m = self._open(
             meeting_id=f"{self.deps.today().isoformat()}-{uuid.uuid4().hex[:6]}",
-            kb_name=kb_name,
+            project=project,
             kb=kb,
             kb_config=kb_config,
             voice_channel_id=msg["voice_channel_id"],
@@ -432,8 +435,9 @@ class MeetingSession:
             m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
         )
         await m.sink.send(OutMessage(notice))
-        await self._reply(msg, t(m.lang, "meeting_started", kb=kb_name))
+        await self._reply(msg, t(m.lang, "meeting_started", project=project))
         self._save_state()
+        m.code_sync = asyncio.create_task(self._sync_code(m))
 
     async def _end(self, msg: dict[str, Any]) -> None:
         if not self.meeting:
@@ -511,6 +515,14 @@ class MeetingSession:
                 log.warning("unreadable meeting state %s", path)
         return sorted(found, key=lambda item: item[1].get("updated_ms", 0), reverse=True)
 
+    @staticmethod
+    async def _sync_or_close(sources: ProjectSources) -> None:
+        try:
+            await sources.sync()
+        except BaseException:
+            sources.close()
+            raise
+
     async def _resume(self, msg: dict[str, Any]) -> None:
         if self.meeting:
             await self._reply(msg, t(self._lang(), "meeting_already_running"))
@@ -518,15 +530,18 @@ class MeetingSession:
         directory, active = next(
             ((d, s) for d, s in self._states() if s.get("status") == "active"), (None, None)
         )
-        kb_config = self.deps.config.knowledge_bases.get(active["kb"]) if active else None
-        if directory is None or active is None or kb_config is None:
+        project_config = (
+            self.deps.config.projects.get(active.get("project", "")) if active else None
+        )
+        if directory is None or active is None or project_config is None:
             await self._reply(msg, t("en", "nothing_to_resume"))
             return
-        kb = self.deps.make_kb(active["kb"], kb_config)
-        await kb.sync()
+        _, kb_config = project_config.knowledge_base
+        kb = self.deps.make_sources(active["project"], project_config)
+        await self._sync_or_close(kb)
         m = self._open(
             meeting_id=active["id"],
-            kb_name=active["kb"],
+            project=active["project"],
             kb=kb,
             kb_config=kb_config,
             voice_channel_id=active["voice_channel_id"],
@@ -547,6 +562,7 @@ class MeetingSession:
         await self._send_optouts(m)
         await self._reply(msg, t(m.lang, "meeting_resumed"))
         self._save_state()
+        m.code_sync = asyncio.create_task(self._sync_code(m))
 
     @staticmethod
     def _next_free_utterance(directory: Path) -> int:
@@ -572,15 +588,24 @@ class MeetingSession:
             await self._reply(msg, t(self._lang(), "retry_publish_none"))
             return
         directory, state = candidates[0]
-        kb_config = self.deps.config.knowledge_bases.get(state.get("kb", ""))
-        if kb_config is None:
+        project_config = self.deps.config.projects.get(state.get("project", ""))
+        if project_config is None:
             await self._reply(msg, t(self._lang(), "retry_publish_none"))
             return
+        _, kb_config = project_config.knowledge_base
         publisher = self.deps.make_publisher(kb_config)
         # The kept files were built on the KB of the meeting day: index rows are rebuilt on
         # today's base, and a decision number taken since is not published.
-        kb = self.deps.make_kb(state["kb"], kb_config)
-        await kb.sync()
+        kb = self.deps.make_sources(state["project"], project_config)
+        try:
+            await self._republish_kept(msg, directory, kb, publisher)
+        finally:
+            kb.close()
+
+    async def _republish_kept(
+        self, msg: dict[str, Any], directory: Path, kb: ProjectSources, publisher: Publisher
+    ) -> None:
+        await kb.sync()  # the knowledge base only: the code is not needed to publish
         decisions_dir = kb.conventions.decisions.dir.rstrip("/") + "/"
         taken = existing_numbers(
             kb.list_files(decisions_dir) + await publisher.open_pr_paths(decisions_dir)
@@ -634,9 +659,9 @@ class MeetingSession:
         self,
         *,
         meeting_id: str,
-        kb_name: str,
-        kb: SyncableKnowledgeBase,
-        kb_config: KbConfig,
+        project: str,
+        kb: ProjectSources,
+        kb_config: RepoConfig,
         voice_channel_id: str,
         text_channel_id: str,
         start_ms: int,
@@ -685,7 +710,7 @@ class MeetingSession:
         m = ActiveMeeting(
             id=meeting_id,
             dir=directory,
-            kb_name=kb_name,
+            project=project,
             kb=kb,
             publisher=agent.publisher,
             voice_channel_id=voice_channel_id,
@@ -709,7 +734,7 @@ class MeetingSession:
         state = {
             "status": status,
             "id": m.id,
-            "kb": m.kb_name,
+            "project": m.project,
             "voice_channel_id": m.voice_channel_id,
             "text_channel_id": m.text_channel_id,
             "start_ms": m.start_ms,
@@ -747,6 +772,10 @@ class MeetingSession:
         finally:
             if m.consumer and not m.consumer.done():
                 m.consumer.cancel()
+            if m.code_sync:
+                m.code_sync.cancel()
+                await asyncio.gather(m.code_sync, return_exceptions=True)
+            m.kb.close()
             try:
                 self._save_state(status=status)
             except Exception:
@@ -757,7 +786,7 @@ class MeetingSession:
         return pr
 
     async def _close(self, m: ActiveMeeting) -> PrRef | None:
-        for task in (m.empty_timer, m.joiner):
+        for task in (m.empty_timer, m.joiner, m.code_sync):
             if task and task is not asyncio.current_task():
                 task.cancel()
         now = self.deps.clock_ms()
@@ -780,6 +809,17 @@ class MeetingSession:
         except Exception:
             log.exception("refreshing the decision pull requests failed")
         return pr
+
+    async def _sync_code(self, m: ActiveMeeting) -> None:
+        """Sync each code repository while the meeting runs: searches use what is indexed."""
+        for repo in m.kb.code_repos:
+            if not repo.indexed:
+                await m.sink.send(OutMessage(t(m.lang, "code_index_building", repo=repo.name)))
+            try:
+                await repo.sync()
+            except Exception:
+                log.exception("syncing the %s repository failed", repo.name)
+                await m.sink.send(OutMessage(t(m.lang, "code_repo_unavailable", repo=repo.name)))
 
     async def _second_pass(self, m: ActiveMeeting) -> list[Segment] | None:
         final = self.deps.final_transcriber

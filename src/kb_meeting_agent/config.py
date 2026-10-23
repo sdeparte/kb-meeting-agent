@@ -65,12 +65,54 @@ class LLMConfig(_Strict):
         return self
 
 
-class KbConfig(_Strict):
+KNOWLEDGE_BASE = "KnowledgeBase"
+CODE_BASE = "CodeBase"
+Tag = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]+$")]
+
+
+class RepoConfig(_Strict):
     repo: str
     base_branch: str = "main"
     token: str | None = None
     clone_url: str | None = None
-    language: str | None = None  # used when the KB's .meeting-agent.yml does not set one
+    language: str | None = None  # KnowledgeBase only: used when .meeting-agent.yml sets none
+    tags: list[Tag]
+    include: list[str] = Field(default_factory=list)  # CodeBase only
+    exclude: list[str] = Field(default_factory=list)  # CodeBase only
+
+    @model_validator(mode="after")
+    def _one_role(self) -> RepoConfig:
+        roles = {KNOWLEDGE_BASE, CODE_BASE} & set(self.tags)
+        if roles == {KNOWLEDGE_BASE, CODE_BASE}:
+            raise ValueError(f"{self.repo} cannot be both {KNOWLEDGE_BASE} and {CODE_BASE}")
+        if not roles:
+            raise ValueError(f"{self.repo} must be tagged {KNOWLEDGE_BASE} or {CODE_BASE}")
+        if CODE_BASE not in self.tags and (self.include or self.exclude):
+            raise ValueError(f"{self.repo}: include and exclude apply to {CODE_BASE} repos only")
+        if KNOWLEDGE_BASE not in self.tags and self.language is not None:
+            raise ValueError(f"{self.repo}: language applies to the {KNOWLEDGE_BASE} repo only")
+        return self
+
+
+class ProjectConfig(_Strict):
+    repos: dict[str, RepoConfig]
+
+    @model_validator(mode="after")
+    def _exactly_one_knowledge_base(self) -> ProjectConfig:
+        found = [name for name, repo in self.repos.items() if KNOWLEDGE_BASE in repo.tags]
+        if len(found) != 1:
+            raise ValueError(
+                f"a project needs exactly one {KNOWLEDGE_BASE} repo, found {len(found)}"
+            )
+        return self
+
+    @property
+    def knowledge_base(self) -> tuple[str, RepoConfig]:
+        return next((n, r) for n, r in self.repos.items() if KNOWLEDGE_BASE in r.tags)
+
+    @property
+    def code_repos(self) -> list[tuple[str, RepoConfig]]:
+        return [(n, r) for n, r in self.repos.items() if CODE_BASE in r.tags]
 
 
 class DefaultsConfig(_Strict):
@@ -147,7 +189,7 @@ class AppConfig(_Strict):
     agent: AgentIdentity = Field(default_factory=AgentIdentity)
     data_dir: Path = Path("~/.local/share/kb-meeting-agent")
     llm: LLMConfig
-    knowledge_bases: dict[str, KbConfig]
+    projects: dict[str, ProjectConfig]
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     discord: DiscordConfig | None = None
     transcription: TranscriptionConfig | None = None
