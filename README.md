@@ -2,7 +2,7 @@
 
 An agent that joins a voice meeting, listens, and works with a knowledge base (KB) of Markdown files in a Git repository:
 
-- answers questions about the KB, and about the project's code when you give it the code repositories, when someone addresses it;
+- answers questions about the KB when someone addresses it, and questions about the project's code ("which code handles…?") when you give it the code repositories;
 - flags statements that contradict the KB, quoting the KB line verbatim;
 - detects decisions, asks the participants to validate them, and opens one pull request per decision, listing the KB pages and code files it probably affects;
 - opens a pull request with detailed minutes at the end of the meeting.

@@ -63,8 +63,8 @@ defaults:
 A project groups the repositories a meeting uses; `/meeting start project:<project>` and `--project <project>` name it. Each repository carries tags:
 
 - **`KnowledgeBase`**: the Markdown KB. Exactly one per project. Its conventions, glossary and templates apply; it is the only source for fact-checks and "related page" messages, and the only repository that receives pull requests.
-- **`CodeBase`**: a code repository, read only. Its files are used to answer questions and listed in decision pull requests when a decision probably requires changing them. Statements are never checked against code.
-- **Free tags** (letters, digits, `-`, `_`), such as `FrontEnd` or `BackEnd`: they label code citations (`[BackEnd] back:src/x.php:12-70`) and steer the search. When a question points at one (say, "how does the back compute it?"), its repositories rank higher; the others are still searched.
+- **`CodeBase`**: a code repository, read only. Its files are used to answer questions about the code ("which code handles…?", "how is … implemented?"), and listed in decision pull requests when a decision probably requires changing them. Other questions are answered from the knowledge base alone, and statements are never checked against code. When code is searched, the knowledge base still leads the excerpts.
+- **Free tags** (letters, digits, `-`, `_`), such as `FrontEnd` or `BackEnd`: they label code citations (`[BackEnd] back:src/x.php:12-70`) and steer the search. When a question about the code points at one (say, "how does the back compute it?"), its repositories rank higher; the others are still searched.
 
 A repository is `KnowledgeBase` or `CodeBase`, never both. The configuration is rejected otherwise.
 
@@ -87,7 +87,7 @@ A repository is `KnowledgeBase` or `CodeBase`, never both. The configuration is 
 
 Patterns match the whole path or the file name; `*` also matches `/`. Files are cut in windows of about 60 lines, ending on a blank line when one is near, with 10 lines of overlap.
 
-**Indexing.** The KB is synced before the agent joins. Code repositories are synced in the background once the meeting has started: searches use what is already indexed, and the agent says so once when a repository has never been indexed or cannot be reached. The first indexing of a large repository takes a while: run `kb-meeting-agent index --project <project>` beforehand. Later syncs only re-index changed files; changing `include`, `exclude` or the embedding model rebuilds the index.
+**Indexing.** The KB is synced before the agent joins. Code repositories are synced in the background once the meeting has started: searches use what is already indexed, and the agent says so once when a repository has never been indexed or cannot be reached. The first indexing of a large repository takes a while: run `kb-meeting-agent index --project <project>` beforehand. Later syncs only re-index changed files; changing `include` or `exclude` adds or removes files without re-reading the others, changing the embedding model rebuilds the index.
 
 ### `defaults`
 

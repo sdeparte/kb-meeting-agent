@@ -6,6 +6,7 @@ from pydantic import create_model
 
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_chunks
+from kb_meeting_agent.config import KNOWLEDGE_BASE
 from kb_meeting_agent.llm.base import LLMProvider, Schema, complete
 from kb_meeting_agent.models import Chunk
 from kb_meeting_agent.ports import KnowledgeBase
@@ -18,6 +19,7 @@ EXCERPTS_MAX_CHARS = 30000  # about 10k tokens: fits a 16k context (Ollama on th
 
 class Queries(Schema):
     queries: list[str]
+    code: bool
     tags: list[str]
 
 
@@ -40,11 +42,13 @@ class Answer(Schema):
 
 QUERIES_SYSTEM = """Rewrite the question into 1 to 3 short search queries for a keyword + semantic search over a knowledge base and source code.
 When the glossary maps a name to a technical identifier, include both.
-{tags}
+{hints}
 GLOSSARY:
 {glossary}"""
 
-TAGS_HINT = """Also list in "tags" the parts of the project the question is about, among: {tags}. Leave it empty when the question points at none."""
+CODE_HINT = """Set "code" to true only when the question is about the source code itself: which code handles something, how something is implemented, what the code does. Otherwise set it to false: the knowledge base alone is searched."""
+NO_CODE_HINT = """Set "code" to false."""
+TAGS_HINT = """When "code" is true, also list in "tags" the parts of the project the question is about, among: {tags}. Leave it empty otherwise, or when the question points at none."""
 NO_TAGS_HINT = """Leave "tags" empty."""
 
 ANSWER_SYSTEM = """You answer a question asked during a meeting, using ONLY the excerpts provided: knowledge base pages and, when present, source code (excerpts with a `tags` attribute). Never use outside knowledge.
@@ -65,18 +69,26 @@ async def answer_question(
     language: str,
 ) -> str:
     free_tags = kb.free_tags
-    hint = TAGS_HINT.format(tags=", ".join(free_tags)) if free_tags else NO_TAGS_HINT
+    hints = "\n".join(
+        (
+            CODE_HINT if kb.has_code else NO_CODE_HINT,
+            TAGS_HINT.format(tags=", ".join(free_tags)) if free_tags else NO_TAGS_HINT,
+        )
+    )
     planned = await complete(
         fast,
-        QUERIES_SYSTEM.format(tags=hint, glossary=kb.glossary() or "(none)"),
+        QUERIES_SYSTEM.format(hints=hints, glossary=kb.glossary() or "(none)"),
         f"RECENT TRANSCRIPT:\n{context}\n\nQUESTION:\n{question}",
         queries_model(free_tags),
     )
-    prefer = tuple(tag for tag in planned.tags if tag in free_tags)
+    # Code is searched only when the question asks about it: its excerpts otherwise crowd the
+    # knowledge base out (a code repo's test fixture once answered a question on the roadmap).
+    only = () if planned.code else (KNOWLEDGE_BASE,)
+    prefer = tuple(tag for tag in planned.tags if tag in free_tags) if planned.code else ()
     chunks: list[Chunk] = []
     seen: set[tuple[str, str]] = set()
     for query in (planned.queries or [question])[:MAX_QUERIES]:
-        for chunk in await kb.search(query, k=5, prefer_tags=prefer):
+        for chunk in await kb.search(query, k=5, prefer_tags=prefer, only_tags=only):
             key = (chunk.anchor, chunk.text)
             if key not in seen:
                 seen.add(key)
