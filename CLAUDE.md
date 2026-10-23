@@ -42,7 +42,7 @@ Core layering:
 ## Conventions worth knowing
 
 - Text shown to meeting participants goes through `agent/messages.py` `t(language, key, ...)`, with entries in **both** `en` and `fr`; the language comes from the KB conventions.
-- Code repositories are read-only: they feed answers and the "files probably affected" list of decision PRs, but are never used to contradict a statement and never written to.
+- Code repositories are read-only: they feed answers to questions about the code (query rewriting sets `code`; other questions search the KB alone, and the KB leads when both are searched) and the "files probably affected" list of decision PRs, but are never used to contradict a statement and never written to.
 - Exceptions carrying a `public` / `status` attribute (`PublishError`, `LLMConfigError`) separate log detail from what may be shown in the meeting; don't leak the log message to participants.
 - The full transcript is never published; decision PRs quote only the relevant lines.
 - Commits follow Conventional Commits with a scope matching the package (`feat(kb):`, `fix(agent):`, `feat(live):`…).
