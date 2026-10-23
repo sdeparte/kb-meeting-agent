@@ -110,6 +110,23 @@ async def test_retry_publish_sends_kept_pull_requests(make_session):
     assert publisher.closed
 
 
+async def test_retry_publish_reports_once_when_closing_the_publisher_fails(make_session):
+    class UnclosablePublisher(FakePublisher):
+        async def aclose(self):
+            raise RuntimeError("connection reset")
+
+    failing, *_ = make_session(strong=FakeProvider(dict(MINUTES)), publisher=FailingPublisher())
+    await start(failing)
+    await speak(failing)
+    await failing.close()
+    working, link, _, publisher = make_session(publisher=UnclosablePublisher())
+    await working.on_event("message", command("meeting_retry_publish"))
+    assert len(publisher.prs) == 1
+    assert [r["text"] for r in link.of("reply")] == [
+        "Published 1 kept pull request(s): https://example.test/pull/1"
+    ]
+
+
 async def test_optout_survives_a_resume_and_deletes_the_speakers_audio(make_session):
     first, link, clock, _ = make_session()
     await start(first)
