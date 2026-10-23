@@ -39,7 +39,6 @@ export class Outbound {
     this.thread = saved.thread ?? null;
     this.left = saved.left ?? false; // the core left the meeting: its last messages still go in the thread
     this.modals = new Map(); // button id -> modal descriptor, for the Edit forms
-    this.catalog = [];
     this.queue = Promise.resolve();
   }
 
@@ -57,9 +56,9 @@ export class Outbound {
       // The core leaves before it writes the minutes: their link still goes in the thread.
       else if (msg.type === "leave") this.#keep({ left: true });
       else if (msg.type === "modals") for (const { id, modal } of msg.modals ?? []) this.modals.set(id, modal);
-      else if (msg.type === "commands") this.catalog = msg.commands ?? [];
       // `reply`: the Slack connector never creates interactions, everything reaches the core
-      // as a chat line, answered with `send`.
+      // as a chat line, answered with `send`. `commands`: Slack's slash commands are fixed in
+      // the app manifest; the catalog only gives the huddle its `!start` (index.js).
     } catch (error) {
       const code = error.data?.error ?? error.message;
       this.log(`${msg.type} failed: ${code}`);
