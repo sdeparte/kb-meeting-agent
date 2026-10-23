@@ -69,3 +69,12 @@ async def test_already_rejected(kb):
 async def test_flag_shows_the_full_kb_line(kb):
     flag = await run(kb, verdict(kb_quote="COOLDOWN_SECONDS | 45"))
     assert flag.quote == "| `COOLDOWN_SECONDS` | `45` | Cooldown after a neutralization `[PROD]` |"
+
+
+async def test_claims_are_checked_against_the_kb_only(sources):
+    strong = FakeProvider({"Verdict": [verdict(verdict="not_covered")]})
+    claim = Claim(subject="RelayConfigProvider", statement="COOLDOWN_SECONDS is 30")
+    await check_claim(
+        strong, sources, claim, threshold=0.8, stale_days=60, today=TODAY, language="en"
+    )
+    assert "RelayConfigProvider.php" not in strong.calls[0][2]

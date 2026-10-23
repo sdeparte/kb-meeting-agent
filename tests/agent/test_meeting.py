@@ -728,3 +728,20 @@ async def test_exchanges_are_recorded_in_the_kb_language(make_agent, kb, kb_orig
     await agent.on_segment(seg(0, "hello"))
     await agent.set_level("silent", announce=False, user="Carol")
     assert lines(agent) == ["Carol a réglé Scribe (IA) sur le niveau `silent`"]
+
+
+async def test_context_links_point_at_the_kb_only(make_agent, sources):
+    searched = []
+    search = sources.search
+
+    async def spy(query, k=8, prefer_tags=(), only_tags=()):
+        searched.append(only_tags)
+        return await search(query, k, prefer_tags, only_tags)
+
+    sources.search = spy
+    fast = FakeProvider({"Extraction": [extraction(topics=["RelayConfigProvider"])]})
+    agent, _, _, _, sink = make_agent(fast, level="context")
+    agent.kb = sources
+    await agent.on_segment(seg(0, "on regarde RelayConfigProvider"))
+    assert searched == [("KnowledgeBase",)]
+    assert sink.messages and "back:" not in sink.texts()[-1]
