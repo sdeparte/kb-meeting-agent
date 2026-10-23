@@ -17,8 +17,8 @@ own angle(s); in inline mode, read it once before sweeping.
    its callers and check the change holds at every call site: a new parameter
    not passed by `cli.py` (replay) **and** `live/` (run); a widened or narrowed
    port in `ports.py` not matched by every implementation (`ProjectSources`,
-   `GitHubPublisher`, `DryRunPublisher`, `ConnectorSink`, `ConsoleSink`, test
-   doubles); a `Schema` field renamed but still read, or missing from
+   `GitHubPublisher`, `DryRunPublisher`, `LocalKeeper`, `ConnectorSink`,
+   `ConsoleSink`, test doubles); a `Schema` field renamed but still read, or missing from
    `FAKE_DEFAULTS`; a config key added to `config.py` but not to
    `docs/configuration.md` / `config.example.yml`; a protocol message changed
    in `live/protocol.py` but not in `connector-discord/src/protocol.js` (or the

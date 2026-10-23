@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A meeting agent that listens to a voice meeting (Discord, or a replayed JSONL transcript) and works against a **project**: one Git-hosted Markdown knowledge base (tag `KnowledgeBase`) plus optional read-only code repositories (tag `CodeBase` + free tags like `FrontEnd`/`BackEnd`). It answers questions, flags contradictions with the KB (quoting the KB line verbatim), turns validated decisions into one PR each, and opens a minutes PR at the end. User-facing docs: `README.md`, `docs/configuration.md` (every config key, and the per-KB `.meeting-agent.yml` conventions), `docs/manual-test.md` (live Discord checklist to run before merging changes to the connector, the session or transcription).
+A meeting agent that listens to a voice meeting (through a platform connector — Discord today — or a replayed JSONL transcript) and works against a **project**: one Git-hosted Markdown knowledge base (tag `KnowledgeBase`) plus optional read-only code repositories (tag `CodeBase` + free tags like `FrontEnd`/`BackEnd`). It answers questions, flags contradictions with the KB (quoting the KB line verbatim), turns validated decisions into one PR each, and opens a minutes PR at the end. User-facing docs: `README.md`, `docs/configuration.md` (every config key, and the per-KB `.meeting-agent.yml` conventions), `docs/manual-test.md` (live Discord checklist to run before merging changes to the connector, the session or transcription).
 
 ## Commands
 
@@ -17,7 +17,7 @@ uv run ruff check . && uv run ruff format --check .
 
 uv run kb-meeting-agent replay examples/transcript.jsonl --project my-project   # dry run into replay-out/
 uv run kb-meeting-agent index --project my-project        # sync + index a project's repos
-uv run kb-meeting-agent run                               # live Discord (needs discord + transcription config)
+uv run kb-meeting-agent run                               # live meetings (needs connector + transcription config)
 ```
 
 `config.yml` is git-ignored; start from `config.example.yml`. `${VAR}` values are read from the environment and unknown keys are rejected. Pytest runs with `asyncio_mode = "auto"` and `tests/` on `pythonpath` (test helpers are imported directly, e.g. `from helpers import ...`). Ruff: line length 100, rules E/F/I/UP/B.
@@ -26,12 +26,13 @@ uv run kb-meeting-agent run                               # live Discord (needs 
 
 Two processes in live mode:
 
-- **`connector-discord/`** (Node, discord.js): joins voice, receives per-speaker Opus, downsamples to 16 kHz mono PCM, relays slash commands/buttons/modals. It holds no meeting logic.
+- **A connector** (`connector-<name>/`; today `connector-discord/`, Node, discord.js): joins voice, receives per-speaker Opus, downsamples to 16 kHz mono PCM, relays slash commands/buttons/modals. It holds no meeting logic, and the core holds no platform logic: the `connector` config section gives its name, `env` (platform credentials, passed as is) and optional `command`.
 - **Python core** (`src/kb_meeting_agent/`): `live/runner.py` spawns the connector as a subprocess (own process group, restarted with backoff) and talks to it over a local WebSocket (`live/link.py`, shared-secret auth). The wire format — JSON messages plus binary audio frames (`>BQB` header: kind, timestamp, speaker id length, then the UTF-8 speaker id); every id is an opaque platform string — is defined in `live/protocol.py` and **mirrored by hand** in `connector-discord/src/protocol.js`; change both together and bump `PROTOCOL_VERSION` when incompatible.
 
 Core layering:
 
-- `ports.py` — the Protocols the agent depends on: `KnowledgeBase` (search/read/conventions/templates), `Publisher` (open/update PRs), `OutputSink` (send `OutMessage` with buttons/modals). Everything else plugs in behind these, which is why replay and tests swap implementations freely (`ConsoleSink`, `DryRunPublisher` vs `GitHubPublisher`, `FakeProvider`).
+- `ports.py` — the Protocols the agent depends on: `KnowledgeBase` (search/read/conventions/templates), `Publisher` (open/update PRs, `aclose`), `ChangeKeeper` (keeps a change that could not be published, for retry-publish), `OutputSink` (send `OutMessage` with buttons/modals). Everything else plugs in behind these, which is why replay and tests swap implementations freely (`ConsoleSink`, `DryRunPublisher` vs `GitHubPublisher`, `LocalKeeper`, `FakeProvider`). `agent/` never imports an adapter (`publish/`, `kb/repo.py`, `live/`, a provider).
+- `forges.py` — where a repository is hosted (`RepoConfig.provider`, only `github` so far): clone URL, the host the git token is scoped to, file links. `publish/factory.py` `build_publisher` picks the forge's `Publisher`. A new host is one `Forge`, one publisher and one `provider` value.
 - `agent/meeting.py` — `MeetingAgent`, the transport-independent brain: feeds segments through `detection.py` (fast model: claims, decisions, topics, "is the agent addressed?", running summary), then `answering.py`, `factcheck.py`, `decisions.py`, `minutes.py` (strong model). Both `cli.py replay` and `live/session.py` drive it.
 - `live/session.py` — `MeetingSession`: per-meeting state on top of the connector (join/resume, opt-out, audio buffering in `live/audio.py`, `live/pipeline.py` transcribing utterances in a bounded pool while keeping per-speaker order, final second transcription pass, closing and publishing).
 - `kb/` — `project.py` `ProjectSources` implements `KnowledgeBase` over one `GitMarkdownKnowledgeBase` (`repo.py`) and N `GitCodeRepository` (`code.py`); `chunker.py` splits files, `index.py` is a hybrid lexical + embedding `SearchIndex` that re-embeds only files whose hash changed; `quote.py` verifies that a quoted KB line really exists (contradictions are dropped otherwise).
