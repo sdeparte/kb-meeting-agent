@@ -82,12 +82,17 @@ A repository is `KnowledgeBase` or `CodeBase`, never both. The configuration is 
 **Which code files are indexed.** The files tracked by Git, minus:
 
 - lockfiles (`*.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`), dependencies and builds (`vendor/`, `node_modules/`, `build/`, `dist/`, `.dart_tool/`), generated code (`*.g.dart`, `*.freezed.dart`, `*.min.js`, `*.map`);
-- secrets files, whatever their case: `.env`, `.env.*`, `*.pem`, `*.key`, and any name containing `secret` or `credential`. An indexed excerpt can be quoted in the meeting channel: never rely on this list alone to keep a secret out of a repository;
+- secrets files, whatever their case: `.env*`, `*.env`, `*.pem`, `*.key`, SSH keys (`id_rsa*`, `id_dsa*`, `id_ecdsa*`, `id_ed25519*`), keystores (`*.keystore`, `*.jks`, `*.p12`, `*.pfx`, `key.properties`), package and network credentials (`.npmrc`, `.netrc`, `.pypirc`), Terraform variables and state (`*.tfvars`, `*.tfstate*`), Firebase configs (`google-services.json`, `GoogleService-Info.plist`), and any name containing `secret` or `credential`;
+- files holding a secret, whatever their name: a private key, a GitHub, AWS, OpenAI-style, Slack, Stripe, Google or GitLab token, or a password written in a URL (`postgres://app:pw@db`, not `${PASSWORD}`). A warning names each file skipped this way;
 - symbolic links, binary files and files over 200 KB.
+
+An indexed excerpt can be quoted in the meeting channel: never rely on these rules alone to keep a secret out of a repository.
 
 Patterns match the whole path or the file name; `*` also matches `/`. Files are cut in windows of about 60 lines, ending on a blank line when one is near, with 10 lines of overlap.
 
-**Indexing.** The KB is synced before the agent joins. Code repositories are synced in the background once the meeting has started: searches use what is already indexed, and the agent says so once when a repository has never been indexed or cannot be reached. The first indexing of a large repository takes a while: run `kb-meeting-agent index --project <project>` beforehand. Later syncs only re-index changed files; changing `include` or `exclude` adds or removes files without re-reading the others, changing the embedding model rebuilds the index.
+**Indexing.** The KB is synced before the agent joins. Code repositories are synced in the background once the meeting has started: searches use what is already indexed, and the agent says so once when a repository has never been indexed or cannot be reached. The first indexing of a large repository takes a while: run `kb-meeting-agent index --project <project>` beforehand. Later syncs only re-index changed files; changing `include` or `exclude` adds or removes files without re-reading the others; changing the embedding model, or a new version that detects more secrets, rebuilds the index.
+
+**What leaves a code repository.** Code excerpts are quoted in the meeting channel and sent to the models. Answers that cite code go into the minutes model's input, and a decision pull request lists the code files it probably affects, linked; the drafting model is told never to copy code into the decision itself. Both pull requests are opened on the knowledge base: keep it no more visible than the code repositories.
 
 ### `defaults`
 
