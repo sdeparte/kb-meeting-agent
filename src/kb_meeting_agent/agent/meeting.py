@@ -437,7 +437,13 @@ class MeetingAgent:
             await self._say(t(self._lang, "decision_draft_failed"))
             return  # still pending: it can be validated again
         draft = draft.model_copy(
-            update={"related_pages": [p for p in draft.related_pages if self.kb.exists(p.path)]}
+            update={
+                "related_pages": [p for p in draft.related_pages if self.kb.exists(p.path)],
+                # an invented file, or one never indexed (secrets, generated code), is dropped
+                "related_code": [
+                    c for c in draft.related_code if self.kb.code_exists(c.repo, c.path)
+                ],
+            }
         )
         number = None
         if "{number" in conventions.filename:
@@ -490,6 +496,11 @@ class MeetingAgent:
             index_content=self._index_content(conventions.index),
             language=self._lang,
             excerpt_note=note,
+            code_links={
+                (item.repo, item.path): link
+                for item in draft.related_code
+                if (link := self.kb.link_file(item.repo, item.path))
+            },
         )
 
     async def refresh_decision_prs(self) -> None:

@@ -101,6 +101,10 @@ class KnowledgeBase(Protocol):
         """A web link to a code chunk's lines; None for knowledge base chunks."""
         ...
 
+    def link_file(self, repo: str, path: str) -> str | None:
+        """A web link to a code file; None for an unknown repository."""
+        ...
+
     def code_exists(self, repo: str, path: str) -> bool: ...
 
     def section(self, chunk: Chunk) -> list[Chunk]:
