@@ -2,7 +2,7 @@
 
 Two files configure the agent:
 
-- **`config.yml`**, on the machine that runs the agent: models, knowledge bases, secrets, default behaviour.
+- **`config.yml`**, on the machine that runs the agent: models, projects and their repositories, secrets, default behaviour.
 - **`.meeting-agent.yml`**, at the root of each KB repository: that KB's conventions. It travels with the KB, so every instance that uses the KB writes in the same format.
 
 ## Instance configuration (`config.yml`)
@@ -20,11 +20,17 @@ llm:
   strong:    { provider: anthropic, model: claude-opus-5-5, api_key: "${ANTHROPIC_API_KEY}", effort: high }
   embedding: { provider: openai-compatible, base_url: "http://localhost:11434/v1", model: "bge-m3" }
 
-knowledge_bases:
-  my-kb:
-    repo: owner/my-kb
-    base_branch: main
-    token: "${GITHUB_TOKEN}"
+projects:
+  my-project:
+    repos:
+      kb:
+        repo: owner/my-kb
+        tags: [KnowledgeBase]
+        token: "${GITHUB_TOKEN}"
+      back:
+        repo: owner/my-backend
+        tags: [CodeBase, BackEnd]
+        token: "${GITHUB_CODE_TOKEN}"
 
 defaults:
   intervention_level: contradictions
@@ -36,7 +42,7 @@ defaults:
 |---|---|---|
 | `agent.name` | `agent` | the agent's name. A segment containing it (whole word, ignoring case and accents) is a request to the agent. The agent introduces itself with it in the recording notice, the minutes name it "<name> (AI)" ("(IA)" in French), and it is given to Whisper as a vocabulary hint. Prefer a word nobody says by accident. |
 | `agent.aliases` | `[]` | other words that address the agent, e.g. a variant spelling or how Whisper tends to transcribe the name. They are only used to recognise that the agent is addressed: unlike `agent.name`, they are not hinted to Whisper, which would learn the misspellings |
-| `data_dir` | `~/.local/share/kb-meeting-agent` | where KB clones and search indexes are kept (`kb/<name>/repo`, `kb/<name>/index.sqlite`) |
+| `data_dir` | `~/.local/share/kb-meeting-agent` | where clones and search indexes are kept (`projects/<project>/<repo>/repo`, `projects/<project>/<repo>/index.sqlite`) |
 
 ### `llm.fast`, `llm.strong`, `llm.embedding`
 
@@ -52,15 +58,36 @@ defaults:
 
 `embedding` must be `openai-compatible` (or `fake`): Anthropic has no embeddings endpoint, and the configuration is rejected otherwise. Changing the embedding model rebuilds the index on the next run.
 
-### `knowledge_bases.<name>`
+### `projects.<project>.repos.<name>`
+
+A project groups the repositories a meeting uses; `/meeting start project:<project>` and `--project <project>` name it. Each repository carries tags:
+
+- **`KnowledgeBase`**: the Markdown KB. Exactly one per project. Its conventions, glossary and templates apply; it is the only source for fact-checks and "related page" messages, and the only repository that receives pull requests.
+- **`CodeBase`**: a code repository, read only. Its files are used to answer questions and listed in decision pull requests when a decision probably requires changing them. Statements are never checked against code.
+- **Free tags** (letters, digits, `-`, `_`), such as `FrontEnd` or `BackEnd`: they label code citations (`[BackEnd] back:src/x.php:12-70`) and steer the search. When a question points at one (say, "how does the back compute it?"), its repositories rank higher; the others are still searched.
+
+A repository is `KnowledgeBase` or `CodeBase`, never both. The configuration is rejected otherwise.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `repo` | (required) | GitHub repository, `owner/name` |
-| `base_branch` | `main` | branch the agent reads and opens pull requests against |
-| `token` | none | GitHub token; required for `--publish` and for a private KB. Permissions: Contents and Pull requests, read and write. |
+| `tags` | (required) | see above |
+| `base_branch` | `main` | branch the agent reads (and, for the KB, opens pull requests against) |
+| `token` | none | GitHub token. KB: required for `--publish` and for a private KB, with Contents and Pull requests read and write. Code repository: Contents read only, for a private repository. |
 | `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to `https://github.com/` URLs. |
-| `language` | `en` | language of the agent's messages, pull requests and generated documents when the KB's `.meeting-agent.yml` does not set `language` (the KB's own setting wins) |
+| `language` | `en` | `KnowledgeBase` only: language of the agent's messages, pull requests and generated documents when the KB's `.meeting-agent.yml` does not set `language` (the KB's own setting wins) |
+| `include` | all files | `CodeBase` only: glob patterns; when set, only matching files are indexed (`src/**`) |
+| `exclude` | none | `CodeBase` only: glob patterns of files not to index, on top of the defaults below |
+
+**Which code files are indexed.** The files tracked by Git, minus:
+
+- lockfiles (`*.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`), dependencies and builds (`vendor/`, `node_modules/`, `build/`, `dist/`, `.dart_tool/`), generated code (`*.g.dart`, `*.freezed.dart`, `*.min.js`, `*.map`);
+- secrets files, whatever their case: `.env`, `.env.*`, `*.pem`, `*.key`, and any name containing `secret` or `credential`. An indexed excerpt can be quoted in the meeting channel: never rely on this list alone to keep a secret out of a repository;
+- symbolic links, binary files and files over 200 KB.
+
+Patterns match the whole path or the file name; `*` also matches `/`. Files are cut in windows of about 60 lines, ending on a blank line when one is near, with 10 lines of overlap.
+
+**Indexing.** The KB is synced before the agent joins. Code repositories are synced in the background once the meeting has started: searches use what is already indexed, and the agent says so once when a repository has never been indexed or cannot be reached. The first indexing of a large repository takes a while: run `kb-meeting-agent index --project <project>` beforehand. Later syncs only re-index changed files; changing `include`, `exclude` or the embedding model rebuilds the index.
 
 ### `defaults`
 
