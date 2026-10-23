@@ -5,3 +5,9 @@ __pycache__/
 .ruff_cache/
 replay-out/
 config.yml
+
+# Local editor and tooling state
+.idea/
+.vscode/
+.superpowers/
+.DS_Store
