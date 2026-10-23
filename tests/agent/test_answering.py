@@ -1,13 +1,15 @@
+import pytest
 from conftest import commit_file
+from pydantic import ValidationError
 
 from kb_meeting_agent.agent import answering
-from kb_meeting_agent.agent.answering import answer_question
+from kb_meeting_agent.agent.answering import answer_question, queries_model
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.llm.fake import FakeProvider
 
 
 async def test_answer_keeps_only_real_sources(kb):
-    fast = FakeProvider({"Queries": [{"queries": ["COOLDOWN_SECONDS default"]}]})
+    fast = FakeProvider({"Queries": [{"queries": ["COOLDOWN_SECONDS default"], "tags": []}]})
     strong = FakeProvider(
         {
             "Answer": [
@@ -30,7 +32,7 @@ async def test_answer_keeps_only_real_sources(kb):
 
 
 async def test_not_covered(kb):
-    fast = FakeProvider({"Queries": [{"queries": []}]})
+    fast = FakeProvider({"Queries": [{"queries": [], "tags": []}]})
     strong = FakeProvider({"Answer": [{"covered": False, "answer": "", "sources": []}]})
     text = await answer_question(fast, strong, kb, question="Who won?", context="", language="fr")
     assert text == t("fr", "not_covered")
@@ -49,11 +51,11 @@ async def excerpts_for_the_first_part_of_a_split_table(kb, kb_origin, monkeypatc
     assert "GAME-40" not in first.text  # the table was split
     original_search = kb.search
 
-    async def search(query, k=8):  # only the first part of the table matches
+    async def search(query, k=8, **_):  # only the first part of the table matches
         return [first, *[c for c in await original_search(query, k) if c.path != "roadmap.md"]]
 
     monkeypatch.setattr(kb, "search", search)
-    fast = FakeProvider({"Queries": [{"queries": ["GAME-01"]}]})
+    fast = FakeProvider({"Queries": [{"queries": ["GAME-01"], "tags": []}]})
     strong = FakeProvider({"Answer": [{"covered": False, "answer": "", "sources": []}]})
     await answer_question(fast, strong, kb, question="Which mini-games?", context="", language="en")
     return strong.calls[0][2]
@@ -69,3 +71,36 @@ async def test_a_section_is_not_added_past_the_excerpts_budget(kb, kb_origin, mo
     monkeypatch.setattr(answering, "EXCERPTS_MAX_CHARS", 1000)
     excerpts = await excerpts_for_the_first_part_of_a_split_table(kb, kb_origin, monkeypatch)
     assert "GAME-01" in excerpts and "GAME-40" not in excerpts
+
+
+async def test_questions_prefer_the_tags_they_point_at(sources):
+    fast = FakeProvider({"Queries": [{"queries": ["cooldown"], "tags": ["BackEnd"]}]})
+    strong = FakeProvider({"Answer": [{"covered": False, "answer": "", "sources": []}]})
+    await answer_question(
+        fast, strong, sources, question="How does the back set it?", context="", language="en"
+    )
+    assert "BackEnd" in fast.calls[0][1]  # the system prompt lists the project's free tags
+    first_excerpt = strong.calls[0][2].split("<excerpt", 2)[1]
+    assert 'tags="CodeBase,BackEnd"' in first_excerpt
+
+
+def test_queries_model_limits_tags():
+    model = queries_model(["BackEnd", "FrontEnd"])
+    assert model.model_validate({"queries": [], "tags": ["BackEnd"]}).tags == ["BackEnd"]
+    with pytest.raises(ValidationError):
+        model.model_validate({"queries": [], "tags": ["Mobile"]})
+    assert model.model_json_schema()["title"] == "Queries"
+
+
+async def test_code_sources_are_labelled_and_linked(sources):
+    code = [h for h in await sources.search("COOLDOWN_SECONDS", k=10) if h.repo == "back"][0]
+    fast = FakeProvider({"Queries": [{"queries": ["COOLDOWN_SECONDS"], "tags": []}]})
+    strong = FakeProvider(
+        {"Answer": [{"covered": True, "answer": "30 s in the back.", "sources": [code.anchor]}]}
+    )
+    text = await answer_question(
+        fast, strong, sources, question="Cooldown?", context="", language="en"
+    )
+    link = f"https://github.com/acme/back/blob/main/{code.path}#L"
+    assert f"`[BackEnd]` [{code.anchor}]({link}" in text
+    assert "the code does" in strong.calls[0][1]

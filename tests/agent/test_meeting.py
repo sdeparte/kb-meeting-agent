@@ -177,7 +177,7 @@ async def test_addressed_question_is_answered(make_agent):
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "tags": []}],
         }
     )
     strong = FakeProvider(
@@ -221,7 +221,7 @@ async def test_an_announcement_is_answered_whatever_the_failure(make_agent, monk
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "tags": []}],
         }
     )
     agent, *_, sink = make_agent(fast, extraction_interval_s=1000)
@@ -244,7 +244,7 @@ async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "tags": []}],
         }
     )
     strong = FakeProvider(
@@ -519,7 +519,7 @@ async def test_edit_button_carries_a_modal_and_modal_submit_validates(make_agent
 
 
 async def test_set_level_and_ask(make_agent):
-    fast = FakeProvider({"Queries": [{"queries": ["cooldown"]}]})
+    fast = FakeProvider({"Queries": [{"queries": ["cooldown"], "tags": []}]})
     strong = FakeProvider(
         {
             "Answer": [
@@ -629,7 +629,7 @@ async def test_a_spoken_question_and_its_answer_are_recorded(make_agent):
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "tags": []}],
         }
     )
     strong = FakeProvider(
