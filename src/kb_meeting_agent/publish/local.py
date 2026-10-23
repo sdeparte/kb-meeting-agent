@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from kb_meeting_agent.ports import BranchChangedError, PrRef, PublishError
@@ -58,12 +61,25 @@ class DryRunPublisher:
         pass
 
 
+@dataclass(frozen=True)
+class KeptChange:
+    branch: str
+    files: dict[str, str]
+    title: str
+    body: str
+    index_rows: dict[str, str]
+
+
 class LocalKeeper:
     """Keeps changes under directory/<branch>/ as DryRunPublisher writes them, plus the index
     rows they add, from which a later publication rebuilds the index on its own base."""
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory
+
+    @classmethod
+    def of_meeting(cls, meeting_dir: Path) -> LocalKeeper:
+        return cls(meeting_dir / "unpublished")
 
     async def keep(
         self,
@@ -79,6 +95,24 @@ class LocalKeeper:
                 json.dumps(index_rows, ensure_ascii=False), encoding="utf-8"
             )
         log.warning("kept %s locally in %s", branch, self._directory)
+
+    def kept(self) -> Iterator[KeptChange]:
+        for description in sorted(self._directory.rglob("PR.md")):
+            root = description.parent
+            heading, _, body = description.read_text(encoding="utf-8").partition("\n\n")
+            rows_file = root / INDEX_ROWS_FILE
+            rows = json.loads(rows_file.read_text(encoding="utf-8")) if rows_file.exists() else {}
+            files = {
+                path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+                for path in root.rglob("*")
+                if path.is_file() and path not in (description, rows_file)
+            }
+            branch = root.relative_to(self._directory).as_posix()
+            yield KeptChange(branch, files, heading.removeprefix("# "), body, rows)
+
+    def discard(self, branch: str) -> None:
+        """Once published: the change is no longer kept."""
+        shutil.rmtree(self._directory / branch)
 
 
 class FakePublisher:

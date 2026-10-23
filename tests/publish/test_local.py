@@ -7,6 +7,7 @@ from kb_meeting_agent.publish.local import (
     INDEX_ROWS_FILE,
     DryRunPublisher,
     FakePublisher,
+    KeptChange,
     LocalKeeper,
 )
 
@@ -74,3 +75,15 @@ async def test_local_keeper_writes_no_index_rows_file_when_there_are_none(tmp_pa
     keeper = LocalKeeper(tmp_path)
     await keeper.keep("b", {"a.md": "x"}, "T", "B", {})
     assert not (tmp_path / "b" / INDEX_ROWS_FILE).exists()
+
+
+async def test_local_keeper_reads_back_what_it_kept_and_discards_it(tmp_path):
+    keeper = LocalKeeper.of_meeting(tmp_path)
+    await keeper.keep("decision/x", {"d/0003-x.md": "c"}, "T", "Body\n\nMore", {"d/README.md": "|"})
+    await keeper.keep("minutes/y", {"m/y.md": "m"}, "M", "B", {})
+    assert list(keeper.kept()) == [
+        KeptChange("decision/x", {"d/0003-x.md": "c"}, "T", "Body\n\nMore", {"d/README.md": "|"}),
+        KeptChange("minutes/y", {"m/y.md": "m"}, "M", "B", {}),
+    ]
+    keeper.discard("decision/x")
+    assert [change.branch for change in keeper.kept()] == ["minutes/y"]
