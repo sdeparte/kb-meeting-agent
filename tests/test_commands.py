@@ -71,6 +71,8 @@ def test_the_catalog_payload_lists_the_slash_commands():
     }
     start = next(c for c in payload if c["id"] == "meeting_start")
     assert start["slash"] == ["meeting", "start"]
+    end = next(c for c in payload if c["id"] == "meeting_end")
+    assert parse("!" + end["words"][-1]) == Parsed("meeting_end", {})
     assert start["options"][0] == {
         "name": "project",
         "description": start["options"][0]["description"],

@@ -1,0 +1,18 @@
+{
+  "name": "kb-meeting-agent-connector-slack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Slack connector for kb-meeting-agent: joins huddles from a dedicated account and relays the agent's messages, buttons and forms.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=22.12" },
+  "scripts": {
+    "start": "node src/index.js",
+    "login": "node src/login.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@slack/bolt": "^5.1.0",
+    "kbma-browser": "file:../connector-browser"
+  }
+}

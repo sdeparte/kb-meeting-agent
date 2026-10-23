@@ -158,6 +158,21 @@ async def test_connector_restart_rejoins_and_records_a_gap(make_session):
     assert session.meeting.gaps == [[60.0, 75.0]]
 
 
+async def test_a_connector_that_needs_an_invitation_has_it_asked_once_per_gap(make_session):
+    session, link, clock, _ = make_session()
+    await start(session)
+    clock.now = 60_000
+    for _ in range(2):  # the connector answers every repeated join the same way
+        await session.on_event("message", {"type": "voice_state", "status": "needs_invite"})
+    asks = [text for text in link.texts() if "invite me again" in text]
+    assert len(asks) == 1
+    clock.now = 90_000
+    await session.on_event("message", {"type": "voice_state", "status": "ready"})
+    assert link.texts()[-1] == "Audio was interrupted from 00:01:00 to 00:01:30."
+    await session.on_event("message", {"type": "voice_state", "status": "needs_invite"})
+    assert len([text for text in link.texts() if "invite me again" in text]) == 2
+
+
 async def test_stats_are_logged_to_the_meeting_folder(make_session):
     session, link, *_ = make_session()
     await start(session)

@@ -101,6 +101,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "no_pending_decision": "none",
         "transcription_lag": "Transcription is running {seconds} s behind.",
         "audio_interrupted": "Audio was interrupted from {start} to {end}.",
+        "invite_agent_again": (
+            "I am no longer in the call and cannot rejoin it on my own: invite me again to go on."
+        ),
         "edit_title": "Edit the decision",
         "edit_label": "Decision",
         "decision_number_taken": (
@@ -273,6 +276,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "no_pending_decision": "aucune",
         "transcription_lag": "La transcription a {seconds} s de retard.",
         "audio_interrupted": "L'audio a été interrompu de {start} à {end}.",
+        "invite_agent_again": (
+            "Je ne suis plus dans l'appel et ne peux pas le rejoindre seul : invitez-moi de nouveau "
+            "pour continuer."
+        ),
         "edit_title": "Modifier la décision",
         "edit_label": "Décision",
         "decision_number_taken": (
