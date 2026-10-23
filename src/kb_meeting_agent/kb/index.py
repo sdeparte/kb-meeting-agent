@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS chunks (
     text TEXT NOT NULL,
     status TEXT,
     verified_date TEXT,
-    vector BLOB NOT NULL
+    vector BLOB NOT NULL,
+    start_line INTEGER,
+    end_line INTEGER
 );
 CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
@@ -35,6 +37,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
 
 
 def embedding_text(chunk: Chunk) -> str:
+    if chunk.start_line is not None:
+        return f"{chunk.anchor}\n{chunk.text}"
     return f"{chunk.path} > {' > '.join(chunk.headings)}\n{chunk.text}"
 
 
@@ -43,6 +47,11 @@ class SearchIndex:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(path)
         self._db.executescript(_SCHEMA)
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(chunks)")}
+        for column in ("start_line", "end_line"):
+            if column not in columns:  # index files created before code repositories
+                self._db.execute(f"ALTER TABLE chunks ADD COLUMN {column} INTEGER")
+        self._db.commit()
         self._embed = embed
 
     def close(self) -> None:
@@ -80,8 +89,9 @@ class SearchIndex:
         self.remove_file(path)
         for chunk, text, vector in zip(chunks, texts, vectors, strict=True):
             cursor = self._db.execute(
-                "INSERT INTO chunks(path, headings, text, status, verified_date, vector) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks"
+                "(path, headings, text, status, verified_date, vector, start_line, end_line) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     chunk.path,
                     json.dumps(list(chunk.headings), ensure_ascii=False),
@@ -89,6 +99,8 @@ class SearchIndex:
                     chunk.status,
                     chunk.verified_date,
                     np.asarray(vector, dtype=np.float32).tobytes(),
+                    chunk.start_line,
+                    chunk.end_line,
                 ),
             )
             self._db.execute(
@@ -166,8 +178,9 @@ class SearchIndex:
     def _rows(self, ids: list[int]) -> dict[int, Chunk]:
         placeholders = ",".join("?" * len(ids))
         result: dict[int, Chunk] = {}
-        for chunk_id, path, headings, text, status, verified in self._db.execute(
-            "SELECT id, path, headings, text, status, verified_date FROM chunks "
+        for chunk_id, path, headings, text, status, verified, start, end in self._db.execute(
+            "SELECT id, path, headings, text, status, verified_date, start_line, end_line "
+            "FROM chunks "
             f"WHERE id IN ({placeholders})",
             ids,
         ):
@@ -177,5 +190,7 @@ class SearchIndex:
                 text=text,
                 status=status,
                 verified_date=verified,
+                start_line=start,
+                end_line=end,
             )
         return result
