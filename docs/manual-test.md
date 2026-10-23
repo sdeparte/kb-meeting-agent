@@ -5,7 +5,7 @@ Run before merging a change to the connector, the session or the transcription.
 ## Setup
 
 - A test Discord server, the bot invited (see the README), two participants with headsets.
-- `config.yml` with `discord`, `transcription` and a test project (a KB and a code repository, indexed with `kb-meeting-agent index`); `uv sync --extra mlx` (Mac) or `--extra faster`.
+- `config.yml` with `connector` (`name: discord`), `transcription` and a test project (a KB and a code repository, indexed with `kb-meeting-agent index`); `uv sync --extra mlx` (Mac) or `--extra faster`.
 - `cd connector-discord && npm ci`, then `uv run kb-meeting-agent run --config config.yml`.
 
 ## Checklist

@@ -161,9 +161,11 @@ The agent answers when its `agent.name`, or one of its `agent.aliases`, appears 
 ### 2. Configure
 
 ```yaml
-discord:
-  token: "${DISCORD_TOKEN}"
-  guild_id: "123456789012345678"
+connector:
+  name: discord
+  env:
+    DISCORD_TOKEN: "${DISCORD_TOKEN}"
+    DISCORD_GUILD_ID: "123456789012345678"
 
 transcription:
   language: fr
@@ -171,7 +173,7 @@ transcription:
   final: { provider: mlx-whisper, model: mlx-community/whisper-large-v3-mlx }         # optional second pass
 ```
 
-On Linux or WSL, use `provider: faster-whisper` (`model: small` on CPU, `large-v3` on a CUDA GPU). Every option is in [docs/configuration.md](docs/configuration.md#discord-and-transcription).
+On Linux or WSL, use `provider: faster-whisper` (`model: small` on CPU, `large-v3` on a CUDA GPU). Every option is in [docs/configuration.md](docs/configuration.md#connector-and-transcription).
 
 ### 3. Install and run
 

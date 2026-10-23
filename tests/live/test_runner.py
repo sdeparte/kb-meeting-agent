@@ -28,7 +28,10 @@ def config(tmp_path, kb_origin=None):
                     }
                 }
             },
-            "discord": {"token": "discord-token", "guild_id": "1"},
+            "connector": {
+                "name": "discord",
+                "env": {"DISCORD_TOKEN": "discord-token", "DISCORD_GUILD_ID": "1"},
+            },
             "transcription": {
                 "live": {"provider": "fake", "model": "fake"},
                 "min_voiced_seconds": 0,
@@ -69,6 +72,22 @@ def test_connector_command_and_minimal_env(tmp_path, monkeypatch):
     assert env["KBMA_CORE_URL"] == "ws://127.0.0.1:1" and env["DISCORD_TOKEN"] == "discord-token"
     assert env["DISCORD_GUILD_ID"] == "1"
     assert "ANTHROPIC_API_KEY" not in env
+
+
+def test_a_connector_can_be_any_command(tmp_path):
+    cfg = config(tmp_path)
+    cfg.connector.command = ["python", "-m", "my_meet_connector"]
+    assert connector_command(cfg) == ["python", "-m", "my_meet_connector"]
+    cfg.connector.command = None
+    cfg.connector.name = "meet"
+    assert connector_command(cfg)[1].endswith("connector-meet/src/index.js")
+    assert connector_env("ws://127.0.0.1:1", "s", cfg)["KBMA_SECRET"] == "s"
+
+
+def test_the_connector_env_cannot_override_the_link(tmp_path):
+    cfg = config(tmp_path)
+    cfg.connector.env["KBMA_CORE_URL"] = "ws://elsewhere"
+    assert connector_env("ws://127.0.0.1:1", "s", cfg)["KBMA_CORE_URL"] == "ws://127.0.0.1:1"
 
 
 async def test_run_accepts_the_connector(tmp_path):

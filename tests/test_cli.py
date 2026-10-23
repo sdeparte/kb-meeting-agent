@@ -67,7 +67,7 @@ projects: {}
     assert "unknown project: nope" in capsys.readouterr().err
 
 
-def test_run_needs_discord_and_transcription(tmp_path, capsys):
+def test_run_needs_a_connector_and_transcription(tmp_path, capsys):
     config = tmp_path / "config.yml"
     config.write_text(
         """
@@ -80,7 +80,7 @@ projects: {}
         encoding="utf-8",
     )
     assert main(["run", "--config", str(config)]) == 2
-    assert "discord" in capsys.readouterr().err
+    assert "connector and transcription" in capsys.readouterr().err
 
 
 def project_config(tmp_path, kb_origin, code_url):
