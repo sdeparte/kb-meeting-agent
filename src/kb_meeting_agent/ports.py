@@ -81,7 +81,27 @@ class KnowledgeBase(Protocol):
     @property
     def conventions(self) -> KbConventions: ...
 
-    async def search(self, query: str, k: int = 8) -> list[Chunk]: ...
+    async def search(
+        self,
+        query: str,
+        k: int = 8,
+        prefer_tags: tuple[str, ...] = (),
+        only_tags: tuple[str, ...] = (),
+    ) -> list[Chunk]:
+        """Chunks of every repository; `prefer_tags` ranks some repositories higher,
+        `only_tags` keeps the repositories carrying one of these tags."""
+        ...
+
+    @property
+    def free_tags(self) -> list[str]:
+        """Tags of the project's repositories other than KnowledgeBase and CodeBase."""
+        ...
+
+    def link(self, chunk: Chunk) -> str | None:
+        """A web link to a code chunk's lines; None for knowledge base chunks."""
+        ...
+
+    def code_exists(self, repo: str, path: str) -> bool: ...
 
     def section(self, chunk: Chunk) -> list[Chunk]:
         """Every chunk of the chunk's section, in page order, the chunk itself included."""
