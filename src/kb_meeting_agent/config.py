@@ -215,19 +215,15 @@ class AppConfig(_Strict):
     connector: ConnectorConfig | None = None
     transcription: TranscriptionConfig | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def _former_discord_section(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "discord" in data:
-            raise ValueError(
-                "the discord section is now `connector: {name: discord, env: {DISCORD_TOKEN: "
-                "..., DISCORD_GUILD_ID: ...}}` (docs/configuration.md#connector)"
-            )
-        return data
-
 
 def load_config(path: Path) -> AppConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    # Before substituting: a validation error would echo the section, token included
+    if isinstance(raw, dict) and "discord" in raw:
+        raise ConfigError(
+            "the discord section is now `connector: {name: discord, env: {DISCORD_TOKEN: ..., "
+            "DISCORD_GUILD_ID: ...}}`; connector_dir is now dir (docs/configuration.md#connector)"
+        )
     config = AppConfig.model_validate(_substitute(raw))
     config.data_dir = config.data_dir.expanduser()
     return config

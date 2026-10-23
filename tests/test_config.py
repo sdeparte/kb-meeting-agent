@@ -118,12 +118,17 @@ def test_live_sections_are_optional(tmp_path, monkeypatch):
     assert cfg.connector is None and cfg.transcription is None
 
 
-def test_the_former_discord_section_says_how_to_migrate(tmp_path, monkeypatch):
+def test_the_former_discord_section_says_how_to_migrate_without_its_token(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
     monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")
-    text = CONFIG.format(data_dir=tmp_path) + 'discord: {token: t, guild_id: "1"}\n'
-    with pytest.raises(ValidationError, match="connector:"):
+    monkeypatch.setenv("TEST_DISCORD_TOKEN", "MTIz.secret-tail")
+    text = (
+        CONFIG.format(data_dir=tmp_path)
+        + 'discord: {token: "${TEST_DISCORD_TOKEN}", guild_id: "1", connector_dir: x}\n'
+    )
+    with pytest.raises(ConfigError, match="connector:.*connector_dir is now dir") as raised:
         load_config(write(tmp_path, text))
+    assert "secret-tail" not in str(raised.value)
 
 
 def test_unknown_transcriber_is_rejected(tmp_path, monkeypatch):
