@@ -250,7 +250,7 @@ class MeetingSession:
         """Ask again, with a growing delay, until the connector reports the voice as ready.
 
         A connector that has just (re)started may get the join before it is logged in to
-        Discord, and gives up after a failed reconnection: the core never does.
+        its platform, and gives up after a failed reconnection: the core never does.
         """
         delay = self.join_retry_s
         while not m.closing and self.meeting is m:

@@ -126,11 +126,19 @@ class DefaultsConfig(_Strict):
     stale_page_days: int = 60
 
 
-class DiscordConfig(_Strict):
-    token: str
-    guild_id: str
+class ConnectorConfig(_Strict):
+    """The process that joins meetings on a platform (Discord, Meet, Slack...) for the core.
+
+    The core knows nothing of the platform: it runs `command` and gives it `env`, its
+    credentials and settings, plus the local link (KBMA_CORE_URL, KBMA_SECRET).
+    """
+
+    name: Annotated[str, StringConstraints(pattern=r"^[a-z0-9-]+$")]
+    # Default: [node, <dir>/src/index.js], dir defaulting to connector-<name>/ of this checkout
+    command: list[str] | None = None
     node: str = "node"
-    connector_dir: Path | None = None
+    dir: Path | None = None
+    env: dict[str, str] = Field(default_factory=dict)
 
 
 class TranscriberRole(_Strict):
@@ -192,8 +200,18 @@ class AppConfig(_Strict):
     llm: LLMConfig
     projects: dict[str, ProjectConfig]
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
-    discord: DiscordConfig | None = None
+    connector: ConnectorConfig | None = None
     transcription: TranscriptionConfig | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _former_discord_section(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "discord" in data:
+            raise ValueError(
+                "the discord section is now `connector: {name: discord, env: {DISCORD_TOKEN: "
+                "..., DISCORD_GUILD_ID: ...}}` (docs/configuration.md#connector)"
+            )
+        return data
 
 
 def load_config(path: Path) -> AppConfig:

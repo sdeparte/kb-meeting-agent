@@ -107,20 +107,38 @@ Patterns match the whole path or the file name; `*` also matches `/`. Files are 
 | `transcription_lag_alert_seconds` | `30` | post a message when the transcription falls this far behind |
 | `transcript_retention_days` | `30` | meeting folders (audio, transcripts, state, kept files) are deleted once they have not been updated for this long, including meetings abandoned after a crash |
 
-## Discord and transcription
+## Connector and transcription
 
 Needed only by `kb-meeting-agent run`.
 
-### `discord`
+### `connector`
+
+The connector is the process that joins meetings on a platform and relays audio, commands and messages to the core over the local protocol (`live/protocol.py`). The core knows nothing of the platform: it runs the connector and passes it `env`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `token` | (required) | bot token |
-| `guild_id` | (required) | server the agent serves; slash commands are registered there |
-| `node` | `node` | Node.js 22.12+ executable |
-| `connector_dir` | `connector-discord/` of this checkout | where the connector lives |
+| `name` | (required) | the connector, e.g. `discord` (lowercase letters, digits, `-`) |
+| `env` | `{}` | environment of the connector: its credentials and settings. Use `${VAR}` for secrets |
+| `command` | `[<node>, <dir>/src/index.js]` | how to start the connector, for one that is not a bundled Node.js connector |
+| `node` | `node` | Node.js 22.12+ executable, for the default `command` |
+| `dir` | `connector-<name>/` of this checkout | where the connector lives, for the default `command` |
 
-The connector only receives the Discord token, the guild id and the local connection details, never model keys or the GitHub token.
+The connector receives `env`, `PATH`, `HOME`, the locale and temporary-folder variables, and the local connection details (`KBMA_CORE_URL`, `KBMA_SECRET`, which `env` cannot override): never model keys or repository tokens.
+
+`connector-discord` reads:
+
+| Variable | Meaning |
+|---|---|
+| `DISCORD_TOKEN` | bot token |
+| `DISCORD_GUILD_ID` | server the agent serves; slash commands are registered there |
+
+```yaml
+connector:
+  name: discord
+  env:
+    DISCORD_TOKEN: "${DISCORD_TOKEN}"
+    DISCORD_GUILD_ID: "123456789012345678"
+```
 
 ### `transcription`
 
@@ -149,7 +167,7 @@ Engine keys (`live`, `final`):
 | `device`, `compute_type`, `beam_size` | `faster-whisper` only (`auto`, `int8`, `1`) |
 | `temperature_fallback` | `mlx-whisper` and `faster-whisper` only, refused elsewhere (default `true`): when the text loops or the model is unsure, decode the utterance again at higher temperatures, up to 6 times. Set `false` on `live`: these retries are mostly on noise that is dropped anyway, and they hold up the utterances behind them (on recorded meetings: half of the GPU time, up to 8 s for one utterance, for 2 utterances in 100 rescued). Keep it on `final`, which has the time |
 
-Without a GitHub `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
+Without a `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
 
 ## KB conventions (`.meeting-agent.yml`)
 

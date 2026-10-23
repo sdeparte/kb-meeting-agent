@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("--level", choices=["silent", "contradictions", "context"])
     replay.add_argument("--auto-validate", action="store_true", help="validate every decision")
     replay.add_argument("--publish", action="store_true", help="open real pull requests")
-    live = commands.add_parser("run", help="join Discord meetings")
+    live = commands.add_parser("run", help="join live meetings through the connector")
     live.add_argument("--config", type=Path, default=Path("config.yml"))
     index = commands.add_parser("index", help="sync and index every repository of a project")
     index.add_argument("--config", type=Path, default=Path("config.yml"))
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    missing = [name for name in ("discord", "transcription") if getattr(config, name) is None]
+    missing = [name for name in ("connector", "transcription") if getattr(config, name) is None]
     if missing:
         print(f"run needs the {' and '.join(missing)} section(s) in {args.config}", file=sys.stderr)
         return 2

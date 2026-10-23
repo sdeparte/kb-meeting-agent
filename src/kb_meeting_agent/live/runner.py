@@ -22,7 +22,7 @@ from kb_meeting_agent.transcription.factory import build_transcriber
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CONNECTOR_DIR = Path(__file__).resolve().parents[3] / "connector-discord"
+CHECKOUT_DIR = Path(__file__).resolve().parents[3]  # bundled connectors: connector-<name>/
 _PASSED_THROUGH = ("PATH", "HOME", "LANG", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP")
 
 
@@ -82,21 +82,19 @@ class ConnectorProcess:
 
 
 def connector_command(config: AppConfig) -> list[str]:
-    assert config.discord is not None
-    directory = config.discord.connector_dir or DEFAULT_CONNECTOR_DIR
-    return [config.discord.node, str(directory / "src" / "index.js")]
+    connector = config.connector
+    assert connector is not None
+    if connector.command:
+        return list(connector.command)
+    directory = connector.dir or CHECKOUT_DIR / f"connector-{connector.name}"
+    return [connector.node, str(directory / "src" / "index.js")]
 
 
 def connector_env(url: str, secret: str, config: AppConfig) -> dict[str, str]:
-    """Only what the connector needs: no model key or GitHub token."""
-    assert config.discord is not None
+    """Only what the connector needs: no model key or repository token."""
+    assert config.connector is not None
     env = {name: os.environ[name] for name in _PASSED_THROUGH if name in os.environ}
-    return env | {
-        "KBMA_CORE_URL": url,
-        "KBMA_SECRET": secret,
-        "DISCORD_TOKEN": config.discord.token,
-        "DISCORD_GUILD_ID": config.discord.guild_id,
-    }
+    return env | config.connector.env | {"KBMA_CORE_URL": url, "KBMA_SECRET": secret}
 
 
 def _deps(config: AppConfig, link: ConnectorLink) -> SessionDeps:
