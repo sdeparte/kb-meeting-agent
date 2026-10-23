@@ -183,9 +183,6 @@ async def draft_decision(
     return DecisionDraft.model_validate(draft.model_dump())
 
 
-INDEX_ROWS_FILE = "INDEX_ROWS.json"  # next to PR.md in a change kept locally
-
-
 @dataclass(frozen=True)
 class Change:
     branch: str

@@ -13,7 +13,7 @@ from kb_meeting_agent.kb.project import build_sources
 from kb_meeting_agent.llm.factory import build_provider
 from kb_meeting_agent.ports import OutMessage, Publisher
 from kb_meeting_agent.publish.github import GitHubPublisher
-from kb_meeting_agent.publish.local import DryRunPublisher
+from kb_meeting_agent.publish.local import DryRunPublisher, LocalKeeper
 
 
 class ConsoleSink:
@@ -126,6 +126,7 @@ async def _replay(args: argparse.Namespace) -> int:
         fast=build_provider(config.llm.fast),
         strong=build_provider(config.llm.strong),
         publisher=publisher,
+        keeper=LocalKeeper(args.out / "unpublished"),
         sink=ConsoleSink(),
         transcript=Transcript(transcript_path),
         settings=AgentSettings(

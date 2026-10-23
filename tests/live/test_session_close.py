@@ -3,10 +3,9 @@ import json
 
 from conftest import KB_FILES, commit_file, minutes_content
 
-from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE
 from kb_meeting_agent.llm.fake import FakeProvider
 from kb_meeting_agent.ports import PublishError
-from kb_meeting_agent.publish.local import FakePublisher
+from kb_meeting_agent.publish.local import INDEX_ROWS_FILE, FakePublisher
 from kb_meeting_agent.transcription.base import TranscriptionResult
 from kb_meeting_agent.transcription.fake import FakeTranscriber
 from live.helpers import command, speak

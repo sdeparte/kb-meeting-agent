@@ -12,7 +12,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
-from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE, append_table_row, existing_numbers
+from kb_meeting_agent.agent.decisions import append_table_row, existing_numbers
 from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
@@ -25,6 +25,7 @@ from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.base import LLMProvider
 from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import OutMessage, PrRef, Publisher
+from kb_meeting_agent.publish.local import INDEX_ROWS_FILE, LocalKeeper
 from kb_meeting_agent.transcription.base import (
     HallucinationFilter,
     Transcriber,
@@ -677,6 +678,7 @@ class MeetingSession:
             fast=self.deps.fast,
             strong=self.deps.strong,
             publisher=self.deps.make_publisher(kb_config),
+            keeper=LocalKeeper(directory / "unpublished"),
             sink=sink,
             transcript=Transcript(directory / "transcript.jsonl"),
             settings=AgentSettings(
