@@ -16,10 +16,11 @@ _FILE_SAFE_ID = re.compile(r"[A-Za-z0-9_]{1,64}")
 
 def speaker_file_id(speaker_id: str) -> str:
     """The speaker id as it appears in file names: ids come from the connector's platform
-    (a Meet participant is "spaces/…/participants/…"), so others are replaced by a hash."""
+    (a Meet participant is "spaces/…/participants/…"), so others are replaced by a hash.
+    Its "~" never occurs in a safe id, so a hash cannot be another speaker's id."""
     if _FILE_SAFE_ID.fullmatch(speaker_id):
         return speaker_id
-    return "h" + hashlib.sha256(speaker_id.encode("utf-8")).hexdigest()[:16]
+    return "~" + hashlib.sha256(speaker_id.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
