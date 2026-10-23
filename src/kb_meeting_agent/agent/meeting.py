@@ -33,7 +33,7 @@ from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.minutes import DecisionRecord, build_minutes_change, write_minutes
 from kb_meeting_agent.agent.prompting import format_segments
 from kb_meeting_agent.agent.transcript import Transcript
-from kb_meeting_agent.config import InterventionLevel
+from kb_meeting_agent.config import KNOWLEDGE_BASE, InterventionLevel
 from kb_meeting_agent.conventions import IndexConfig
 from kb_meeting_agent.kb.quote import quote_exists
 from kb_meeting_agent.llm.base import (
@@ -309,7 +309,7 @@ class MeetingAgent:
         last = self._last_context_at
         if last is not None and now - last < self.settings.context_min_interval_s:
             return
-        results = await self.kb.search(topic, k=1)
+        results = await self.kb.search(topic, k=1, only_tags=(KNOWLEDGE_BASE,))
         if results:
             self._last_context_at = now
             self._record("context", anchor=results[0].anchor)
