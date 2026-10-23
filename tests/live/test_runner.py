@@ -17,8 +17,16 @@ def config(tmp_path, kb_origin=None):
                 role: {"provider": "fake", "model": "fake"}
                 for role in ("fast", "strong", "embedding")
             },
-            "knowledge_bases": {
-                "test": {"repo": "acme/kb", "clone_url": str(kb_origin or tmp_path)}
+            "projects": {
+                "test": {
+                    "repos": {
+                        "kb": {
+                            "repo": "acme/kb",
+                            "clone_url": str(kb_origin or tmp_path),
+                            "tags": ["KnowledgeBase"],
+                        }
+                    }
+                }
             },
             "discord": {"token": "discord-token", "guild_id": "1"},
             "transcription": {

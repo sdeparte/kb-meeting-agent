@@ -20,8 +20,8 @@ test("command names map to protocol names", () => {
 });
 
 test("options are read by name", () => {
-  const options = commandOptions(interaction("meeting", "start", { kb: "cyberhack", level: "silent" }));
-  assert.deepEqual(options, { kb: "cyberhack", level: "silent", question: null });
+  const options = commandOptions(interaction("meeting", "start", { project: "cyberhack", level: "silent" }));
+  assert.deepEqual(options, { project: "cyberhack", level: "silent", question: null });
 });
 
 test("every meeting subcommand is declared", () => {

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from kb_meeting_agent.config import KbConfig
+from kb_meeting_agent.config import RepoConfig
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
 from kb_meeting_agent.llm.fake import FakeProvider
 
@@ -109,7 +109,7 @@ def kb_origin(tmp_path) -> Path:
 
 @pytest.fixture
 async def kb(tmp_path, kb_origin):
-    config = KbConfig(repo="acme/kb", clone_url=str(kb_origin))
+    config = RepoConfig(repo="acme/kb", clone_url=str(kb_origin), tags=["KnowledgeBase"])
     knowledge_base = GitMarkdownKnowledgeBase(
         "test", config, tmp_path / "data", FakeProvider().embed, embedding_model="fake"
     )
