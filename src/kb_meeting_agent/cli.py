@@ -130,7 +130,7 @@ async def _replay(args: argparse.Namespace) -> int:
         fast=build_provider(config.llm.fast),
         strong=build_provider(config.llm.strong),
         publisher=publisher,
-        keeper=LocalKeeper(args.out / "unpublished"),
+        keeper=LocalKeeper.of_meeting(args.out),
         sink=ConsoleSink(),
         transcript=Transcript(transcript_path),
         settings=AgentSettings(
