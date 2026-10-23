@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+
 async def test_search_merges_repos_and_labels_chunks(sources):
     hits = await sources.search("cooldown", k=10)
     assert {hit.repo for hit in hits} == {"kb", "back"}
@@ -5,10 +8,9 @@ async def test_search_merges_repos_and_labels_chunks(sources):
     assert kb_hit.tags == ("KnowledgeBase",) and kb_hit.start_line is None
 
 
-async def test_preferred_tags_boost_without_excluding(sources):
+async def test_the_kb_leads_and_a_preferred_tag_follows(sources):
     hits = await sources.search("cooldown", k=10, prefer_tags=("BackEnd",))
-    assert hits[0].repo == "back"
-    assert any(h.repo == "kb" for h in hits)
+    assert [h.repo for h in hits[:2]] == ["kb", "back"]
 
 
 async def test_only_tags_filters_strictly(sources):
@@ -46,18 +48,22 @@ def _chunks(repo, tags, n):
     return [Chunk(f"{repo}{i}.md", (), "x", None, None, repo=repo, tags=tags) for i in range(n)]
 
 
-async def test_a_preferred_tag_keeps_the_kb_with_many_results(sources, monkeypatch):
-    kb_hits = _chunks("kb", ("KnowledgeBase",), 10)
-    back_hits = _chunks("back", ("CodeBase", "BackEnd"), 10)
+async def test_the_kb_weighs_more_than_code_and_a_preferred_tag_more_than_the_rest(
+    sources, monkeypatch
+):
+    def results(repo, tags):
+        async def search(query, k):
+            return _chunks(repo, tags, 10)[:k]
 
-    async def kb_search(query, k):
-        return kb_hits[:k]
+        return search
 
-    async def back_search(query, k):
-        return back_hits[:k]
-
-    monkeypatch.setattr(sources, "_kb_search", kb_search)
-    monkeypatch.setattr(sources.code_repos[0], "search", back_search)
-    hits = await sources.search("q", k=5, prefer_tags=("BackEnd",))
-    assert hits[0].repo == "back"
-    assert sum(h.repo == "kb" for h in hits) >= 2
+    front = SimpleNamespace(
+        name="front", tags=("CodeBase", "FrontEnd"), search=results("front", ("FrontEnd",))
+    )
+    monkeypatch.setattr(sources, "_kb_search", results("kb", ("KnowledgeBase",)))
+    monkeypatch.setattr(sources.code_repos[0], "search", results("back", ("BackEnd",)))
+    monkeypatch.setattr(sources, "code_repos", [sources.code_repos[0], front])
+    hits = await sources.search("q", k=6)
+    assert [h.repo for h in hits] == ["kb", "back", "front", "kb", "kb", "back"]
+    hits = await sources.search("q", k=6, prefer_tags=("BackEnd",))
+    assert [h.repo for h in hits] == ["kb", "back", "front", "kb", "back", "kb"]

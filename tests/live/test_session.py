@@ -276,7 +276,7 @@ async def test_the_answer_to_a_spoken_question_replies_to_its_announcement(make_
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"], "tags": []}],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
         }
     )
     strong = FakeProvider({"Answer": [{"covered": True, "answer": "45 s.", "sources": []}]})
@@ -305,8 +305,8 @@ async def test_code_sync_runs_in_the_background(make_session, code_origin):
     await session.meeting.code_sync
     assert any("Building the index of back" in text for text in link.texts())
     assert session.meeting.kb.code_repos[0].indexed
-    [hit, *_] = await session.meeting.kb.search("COOLDOWN_SECONDS", prefer_tags=("BackEnd",))
-    assert hit.repo == "back"
+    hits = await session.meeting.kb.search("COOLDOWN_SECONDS", prefer_tags=("BackEnd",))
+    assert any(hit.repo == "back" for hit in hits)
 
 
 async def test_an_unavailable_code_repo_is_reported_once(make_session, tmp_path):

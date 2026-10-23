@@ -44,6 +44,10 @@ class ProjectSources:
         return self._kb
 
     @property
+    def has_code(self) -> bool:
+        return bool(self.code_repos)
+
+    @property
     def free_tags(self) -> list[str]:
         tags = {tag for repo in self.code_repos for tag in repo.tags} | set(self._kb_tags)
         return sorted(tags - {KNOWLEDGE_BASE, CODE_BASE})
@@ -69,9 +73,10 @@ class ProjectSources:
             *((repo.name, repo.tags, repo.search) for repo in self.code_repos),
         ]
         # Each repository's own ranking, interleaved by rank: the scores of two indexes are not
-        # comparable, their ranks are. A preferred repository moves up 1.5 times faster through
-        # the ranks (its 3rd result comes with the others' 2nd): it leads without crowding the
-        # knowledge base out, which a boost on scores would do (its 10th result beat their 1st).
+        # comparable, their ranks are. The knowledge base and a preferred repository move up 1.5
+        # times faster through the ranks (their 3rd result comes with the others' 2nd), the
+        # knowledge base first on a tie: code adds to it without crowding it out, which a boost
+        # on scores would do (a code file's 10th result beat the knowledge base's 1st).
         scored: list[tuple[float, int, Chunk]] = []
         for name, tags, search in searches:
             if only_tags and not set(only_tags) & set(tags):
@@ -81,7 +86,8 @@ class ProjectSources:
             except Exception:
                 log.exception("searching the %s repository failed", name)
                 continue
-            boost = PREFERRED_TAG_BOOST if set(prefer_tags) & set(tags) else 1.0
+            preferred = name == self._kb_name or set(prefer_tags) & set(tags)
+            boost = PREFERRED_TAG_BOOST if preferred else 1.0
             for rank, chunk in enumerate(results):
                 scored.append((rank / boost - (boost - 1), len(scored), chunk))
         scored.sort(key=lambda item: (item[0], item[1]))

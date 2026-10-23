@@ -93,6 +93,11 @@ class KnowledgeBase(Protocol):
         ...
 
     @property
+    def has_code(self) -> bool:
+        """Whether the project has code repositories."""
+        ...
+
+    @property
     def free_tags(self) -> list[str]:
         """Tags of the project's repositories other than KnowledgeBase and CodeBase."""
         ...

@@ -73,6 +73,10 @@ class GitMarkdownKnowledgeBase(GitCheckout):
         return await self._index.search(query, k=k, boost_paths=self._conventions.authoritative)
 
     @property
+    def has_code(self) -> bool:
+        return False
+
+    @property
     def free_tags(self) -> list[str]:
         return []
 
