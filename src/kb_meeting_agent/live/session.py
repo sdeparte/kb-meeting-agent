@@ -7,7 +7,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
@@ -17,6 +17,7 @@ from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
 from kb_meeting_agent.agent.transcript import Transcript
+from kb_meeting_agent.commands import button_commands, catalog_payload, help_text, parse, typed
 from kb_meeting_agent.config import AppConfig, ProjectConfig, RepoConfig, TranscriptionConfig
 from kb_meeting_agent.kb.project import ProjectSources
 from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler, speaker_file_id
@@ -34,6 +35,17 @@ log = logging.getLogger(__name__)
 
 LOST_VOICE_STATES = ("disconnected", "destroyed", "lost")
 MAX_SECOND_PASS_FAILURES = 3
+# Commands that change the meeting itself: only from its call or its text channel.
+PARTICIPANT_COMMANDS = frozenset(
+    {
+        "meeting_project",
+        "meeting_end",
+        "meeting_level",
+        "decision_validate",
+        "decision_ignore",
+        "decision_edit",
+    }
+)
 
 
 class ConnectorPort(Protocol):
@@ -43,9 +55,15 @@ class ConnectorPort(Protocol):
 class ConnectorSink:
     """Posts the agent's messages to the meeting's text channel through the connector."""
 
-    def __init__(self, link: ConnectorPort, channel_id: str) -> None:
+    def __init__(
+        self, link: ConnectorPort, channel_id: str, *, buttons: bool = True, lang: str = "en"
+    ) -> None:
         self._link = link
         self._channel_id = channel_id
+        # hello.capabilities.buttons: False on text-only platforms, where what to type
+        # replaces them.
+        self.buttons = buttons
+        self._lang = lang
         # The connector keeps the ids of the messages it posted across meetings: a prefix of
         # this sink's own, so an answer never replies to another meeting's message.
         self._prefix = uuid.uuid4().hex[:6]
@@ -57,6 +75,13 @@ class ConnectorSink:
     async def send(self, message: OutMessage) -> str:
         self._count += 1
         request_id = f"{self._prefix}-m{self._count}"
+        text = message.text
+        if not self.buttons:
+            typed = [c for b in message.buttons if (c := button_commands(b.id, self._lang))]
+            if typed:
+                commands = " / ".join(f"`{c}`" for c in typed)
+                text += "\n" + t(self._lang, "decision_reply_hint", commands=commands)
+            message = replace(message, text=text, buttons=())
         buttons = [
             {"id": b.id, "label": b.label, **({"modal": asdict(b.modal)} if b.modal else {})}
             for b in message.buttons
@@ -142,6 +167,9 @@ class MeetingSession:
     def __init__(self, deps: SessionDeps) -> None:
         self.deps = deps
         self.meeting: ActiveMeeting | None = None
+        self._buttons = True  # from the connector's hello: whether it can show buttons
+        # A meeting interrupted in a call, offered by `start` there: (call, (folder, state)).
+        self._resume_offer: tuple[str, tuple[Path, dict[str, Any]]] | None = None
         self._meetings_dir = deps.config.data_dir / "meetings"
         self._purge_expired()
 
@@ -177,7 +205,7 @@ class MeetingSession:
         elif kind == "message":
             await self._on_message(payload)
         elif kind == "connected":
-            await self._on_connected()
+            await self._on_connected(payload)
         elif kind == "disconnected":
             self._on_disconnected()
 
@@ -201,6 +229,8 @@ class MeetingSession:
         m = self._active()
         if kind == "command":
             await self._on_command(msg)
+        elif kind == "chat":
+            await self._on_chat(msg)
         elif kind == "button" and m:
             m.sink.forget_modals(msg["custom_id"])
             await m.queue.put(("button", msg["custom_id"], msg["user"]["name"]))
@@ -223,7 +253,11 @@ class MeetingSession:
         elif kind == "error":
             log.warning("connector error: %s", msg.get("message"))
 
-    async def _on_connected(self) -> None:
+    async def _on_connected(self, hello: dict[str, Any]) -> None:
+        await self.deps.link.send("commands", commands=catalog_payload())
+        self._buttons = bool((hello.get("capabilities") or {}).get("buttons", True))
+        if self.meeting:
+            self.meeting.sink.buttons = self._buttons
         m = self._active()
         if m:
             self._gap_start()
@@ -352,17 +386,11 @@ class MeetingSession:
                 elif kind == "level":
                     await m.agent.set_level(item[1], announce=False, user=item[2])
                 elif kind == "ask":
-                    await self.deps.link.send(
-                        "reply",
-                        interaction_id=item[2],
-                        text=await m.agent.ask(item[1], user=item[3]),
-                    )
+                    await self._respond(item[2], await m.agent.ask(item[1], user=item[3]))
             except Exception:
                 log.exception("meeting step %s failed", item[0])
                 if item[0] == "ask":  # the user is waiting on a deferred reply
-                    await self.deps.link.send(
-                        "reply", interaction_id=item[2], text=t(m.lang, "command_failed")
-                    )
+                    await self._respond(item[2], t(m.lang, "command_failed"))
             finally:
                 m.queue.task_done()
                 self._save_state()
@@ -375,8 +403,44 @@ class MeetingSession:
 
     # -- commands ------------------------------------------------------------------------
 
-    async def _reply(self, msg: dict[str, Any], text: str) -> None:
-        await self.deps.link.send("reply", interaction_id=msg["interaction_id"], text=text)
+    async def _respond(self, msg: dict[str, Any], text: str) -> None:
+        """Answer a command where it came from: a slash command's deferred reply, or the
+        channel a chat command was typed in."""
+        if msg.get("origin") != "chat":
+            await self.deps.link.send("reply", interaction_id=msg["interaction_id"], text=text)
+            return
+        channel = msg.get("text_channel_id") or (self.meeting and self.meeting.text_channel_id)
+        await self.deps.link.send(
+            "send",
+            request_id=f"r-{uuid.uuid4().hex[:12]}",
+            channel_id=channel,
+            text=text,
+            buttons=[],
+        )
+
+    async def _on_chat(self, msg: dict[str, Any]) -> None:
+        """A chat line: the same commands as the slash commands, typed as `!…`."""
+        parsed = parse(msg.get("text", ""))
+        if parsed is None:
+            return
+        # An unknown word may be another bot's command: the help only in the meeting's
+        # text channel, where the agent is the one expected to answer.
+        if not parsed.known and not (
+            self.meeting and msg.get("text_channel_id") == self.meeting.text_channel_id
+        ):
+            return
+        await self._on_command(
+            {
+                "type": "command",
+                "origin": "chat",
+                "interaction_id": f"chat-{uuid.uuid4().hex}",
+                "name": parsed.id,
+                "options": parsed.options,
+                "user": msg["user"],
+                "text_channel_id": msg.get("text_channel_id"),
+                "voice_channel_id": msg.get("voice_channel_id"),
+            }
+        )
 
     async def _on_command(self, msg: dict[str, Any]) -> None:
         handlers = {
@@ -387,30 +451,191 @@ class MeetingSession:
             "meeting_resume": self._resume,
             "meeting_retry_publish": self._retry_publish,
             "ask": self._ask,
+            "help": self._help,
+            "meeting_project": self._project,
+            "decision_validate": self._decide,
+            "decision_ignore": self._decide,
+            "decision_edit": self._decide,
         }
         handler = handlers.get(msg["name"])
         if handler is None:
-            await self._reply(msg, t(self._lang(), "unknown_command"))
+            await self._respond(msg, t(self._lang(), "unknown_command"))
+            return
+        if msg["name"] in PARTICIPANT_COMMANDS and not self._from_meeting(msg):
+            await self._respond(msg, t(self._lang(), "not_in_meeting"))
             return
         try:
             await handler(msg)
         except Exception:
             log.exception("command %s failed", msg["name"])
-            await self._reply(msg, t(self._lang(), "command_failed"))
+            await self._respond(msg, t(self._lang(), "command_failed"))
+
+    def _from_meeting(self, msg: dict[str, Any]) -> bool:
+        """Whether a command comes from the meeting's call or its text channel (or there is
+        no meeting, which the handler answers)."""
+        m = self.meeting
+        return m is None or (
+            msg.get("voice_channel_id") == m.voice_channel_id
+            or msg.get("text_channel_id") == m.text_channel_id
+        )
+
+    async def _post_notice(self, m: ActiveMeeting, kb_config: RepoConfig) -> None:
+        notice = t(
+            m.lang,
+            "recording_notice",
+            repo=kb_config.repo,
+            name=self.deps.config.agent.name,
+            project=m.project,
+        )
+        await m.sink.send(OutMessage(notice))
+
+    async def _project(self, msg: dict[str, Any]) -> None:
+        if (m := await self._open_meeting(msg)) is None:
+            return
+        found = self.deps.config.project_named(msg["options"].get("project"))
+        if found is None:
+            names = ", ".join(sorted(self.deps.config.projects))
+            await self._respond(msg, t(m.lang, "unknown_project", names=names))
+            return
+        name, project_config = found
+        if name == m.project:
+            await self._respond(msg, t(m.lang, "project_changed", project=name))
+        elif m.agent.acted:
+            await self._respond(msg, t(m.lang, "project_locked", project=m.project))
+        else:
+            await self._switch_project(msg, m, name, project_config)
+
+    async def _switch_project(
+        self, msg: dict[str, Any], m: ActiveMeeting, name: str, project_config: ProjectConfig
+    ) -> None:
+        """Reopen the meeting on another project: same id, folder, transcript and opt-outs;
+        new sources, publisher, agent, vocabulary hint and transcription pipeline."""
+        _, kb_config = project_config.knowledge_base
+        kb = self.deps.make_sources(name, project_config)
+        await self._sync_or_close(kb)
+        # Utterances still open stay open: the new meeting keeps the assembler, so whoever
+        # is speaking is not cut. What is already recorded is handled on the old project.
+        await m.pipeline.drain()
+        await m.queue.join()
+        # Meanwhile the meeting may have closed (the room emptied), or what was still being
+        # transcribed or queued may have made the agent speak.
+        if m.closing or self.meeting is not m:
+            kb.close()
+            return
+        if m.agent.acted:
+            kb.close()
+            await self._respond(msg, t(m.lang, "project_locked", project=m.project))
+            return
+        await m.queue.put(("stop",))
+        if m.consumer:
+            await m.consumer
+        for task in (m.code_sync, m.joiner):
+            if task:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        m.kb.close()
+        try:
+            await m.publisher.aclose()
+        except Exception:
+            log.exception("closing the publisher failed")
+        new = self._open(
+            meeting_id=m.id,
+            project=name,
+            kb=kb,
+            kb_config=kb_config,
+            voice_channel_id=m.voice_channel_id,
+            text_channel_id=m.text_channel_id,
+            start_ms=m.start_ms,
+            meeting_date=m.meeting_date,
+            assembler=m.assembler,
+        )
+        new.agent.restore(m.agent.snapshot())
+        new.opted_out |= m.opted_out
+        new.gaps, new.gap_started_ms = m.gaps, m.gap_started_ms
+        new.humans, new.empty_timer = m.humans, m.empty_timer
+        if m.voice_ready.is_set():
+            new.voice_ready.set()
+        else:
+            self._keep_joining(new)
+        await self._post_notice(new, kb_config)
+        await self._respond(msg, t(new.lang, "project_changed", project=name))
+        self._save_state()
+        new.code_sync = asyncio.create_task(self._sync_code(new))
+
+    async def _help(self, msg: dict[str, Any]) -> None:
+        await self._respond(msg, help_text(self._lang()))
+
+    async def _decide(self, msg: dict[str, Any]) -> None:
+        """A decision validated, ignored or reworded by a typed command: what its button or
+        its Edit modal would have done."""
+        if (m := await self._open_meeting(msg)) is None:
+            return
+        decision, user = msg["options"]["decision"].casefold(), msg["user"]["name"]
+        found = m.agent.decisions.get(decision)
+        if found is None or found.state != "pending":
+            pending = [d for d, c in m.agent.decisions.items() if c.state == "pending"]
+            listed = ", ".join(pending) or t(m.lang, "no_pending_decision")
+            await self._respond(
+                msg, t(m.lang, "unknown_decision", decision=decision, pending=listed)
+            )
+            return
+        action = msg["name"].removeprefix("decision_")
+        custom_id = f"decision:{decision}:{action}"
+        m.sink.forget_modals(custom_id)
+        if action == "edit":
+            await m.queue.put(("modal", custom_id, msg["options"]["statement"], user))
+        else:
+            await m.queue.put(("button", custom_id, user))
+
+    def _interrupted_in(
+        self, voice_channel_id: str, project: str | None
+    ) -> tuple[Path, dict[str, Any]] | None:
+        """Today's meeting left active by a crash in this call, on the named project if one
+        is named: a channel used again another day, or for another project, starts afresh
+        (`!resume` still picks the old meeting up)."""
+        today = self.deps.today().isoformat()
+        return next(
+            (
+                (d, s)
+                for d, s in self._states()
+                if s.get("status") == "active"
+                and s.get("voice_channel_id") == voice_channel_id
+                and s.get("meeting_date") == today
+                and s.get("project") in self.deps.config.projects
+                and project in (None, s.get("project"))
+            ),
+            None,
+        )
 
     async def _start(self, msg: dict[str, Any]) -> None:
         if self.meeting:
-            await self._reply(msg, t(self._lang(), "meeting_already_running"))
+            await self._respond(msg, t(self._lang(), "meeting_already_running"))
             return
         if not msg.get("voice_channel_id"):
-            await self._reply(msg, t("en", "join_voice_first"))
+            await self._respond(msg, t("en", "join_voice_first"))
             return
-        project = msg["options"].get("project") or ""
-        project_config = self.deps.config.projects.get(project)
-        if project_config is None:
+        named = msg["options"].get("project")
+        call = msg["voice_channel_id"]
+        # A meeting interrupted in this call is offered once; `start` again starts afresh.
+        offered = self._resume_offer and self._resume_offer[0] == call
+        self._resume_offer = None
+        if not offered and (interrupted := self._interrupted_in(call, named)):
+            self._resume_offer = (call, interrupted)
+            offer = t(
+                "en",
+                "resume_offer",
+                project=interrupted[1]["project"],
+                resume=typed("meeting_resume", "en"),
+                start=typed("meeting_start", "en"),
+            )
+            await self._respond(msg, offer)
+            return
+        found = self.deps.config.project_named(named)
+        if found is None:
             names = ", ".join(sorted(self.deps.config.projects))
-            await self._reply(msg, t("en", "unknown_project", names=names))
+            await self._respond(msg, t("en", "unknown_project", names=names))
             return
+        project, project_config = found
         self._purge_expired()
         _, kb_config = project_config.knowledge_base
         kb = self.deps.make_sources(project, project_config)
@@ -428,22 +653,19 @@ class MeetingSession:
         if level := msg["options"].get("level"):
             await m.agent.set_level(level, announce=False, user=msg["user"]["name"])
         await self._join(m)
-        notice = t(
-            m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
-        )
-        await m.sink.send(OutMessage(notice))
-        await self._reply(msg, t(m.lang, "meeting_started", project=project))
+        await self._post_notice(m, kb_config)
+        await self._respond(msg, t(m.lang, "meeting_started", project=project))
         self._save_state()
         m.code_sync = asyncio.create_task(self._sync_code(m))
 
     async def _end(self, msg: dict[str, Any]) -> None:
         if not self.meeting:
-            await self._reply(msg, t("en", "no_meeting"))
+            await self._respond(msg, t("en", "no_meeting"))
             return
         if self.meeting.closing:
-            await self._reply(msg, t(self._lang(), "meeting_already_ending"))
+            await self._respond(msg, t(self._lang(), "meeting_already_ending"))
             return
-        await self._reply(msg, t(self._lang(), "meeting_ending"))
+        await self._respond(msg, t(self._lang(), "meeting_ending"))
         await self.close()
 
     async def _open_meeting(self, msg: dict[str, Any]) -> ActiveMeeting | None:
@@ -453,10 +675,10 @@ class MeetingSession:
         never be handled, so the command is refused instead.
         """
         if not self.meeting:
-            await self._reply(msg, t("en", "no_meeting"))
+            await self._respond(msg, t("en", "no_meeting"))
             return None
         if self.meeting.closing:
-            await self._reply(msg, t(self._lang(), "meeting_already_ending"))
+            await self._respond(msg, t(self._lang(), "meeting_already_ending"))
             return None
         return self.meeting
 
@@ -465,11 +687,11 @@ class MeetingSession:
             return
         level = msg["options"].get("level")
         await m.queue.put(("level", level, msg["user"]["name"]))
-        await self._reply(msg, t(self._lang(), "level_changed", level=level))
+        await self._respond(msg, t(self._lang(), "level_changed", level=level))
 
     async def _optout(self, msg: dict[str, Any]) -> None:
         if not self.meeting:
-            await self._reply(msg, t("en", "no_meeting"))
+            await self._respond(msg, t("en", "no_meeting"))
             return
         m = self.meeting
         user_id = msg["user"]["id"]
@@ -479,14 +701,12 @@ class MeetingSession:
             path.unlink(missing_ok=True)
         await self.deps.link.send("optout", user_id=user_id)
         self._save_state()
-        await self._reply(msg, t(self._lang(), "optout_done"))
+        await self._respond(msg, t(self._lang(), "optout_done"))
 
     async def _ask(self, msg: dict[str, Any]) -> None:
         if (m := await self._open_meeting(msg)) is None:
             return
-        await m.queue.put(
-            ("ask", msg["options"].get("question", ""), msg["interaction_id"], msg["user"]["name"])
-        )
+        await m.queue.put(("ask", msg["options"].get("question", ""), msg, msg["user"]["name"]))
 
     def _purge_expired(self) -> None:
         """Delete meeting folders (audio, transcripts, state, kept files) past retention.
@@ -522,16 +742,18 @@ class MeetingSession:
 
     async def _resume(self, msg: dict[str, Any]) -> None:
         if self.meeting:
-            await self._reply(msg, t(self._lang(), "meeting_already_running"))
+            await self._respond(msg, t(self._lang(), "meeting_already_running"))
             return
-        directory, active = next(
+        found = self._resume_offer[1] if self._resume_offer else None
+        self._resume_offer = None
+        directory, active = found or next(
             ((d, s) for d, s in self._states() if s.get("status") == "active"), (None, None)
         )
         project_config = (
             self.deps.config.projects.get(active.get("project", "")) if active else None
         )
         if directory is None or active is None or project_config is None:
-            await self._reply(msg, t("en", "nothing_to_resume"))
+            await self._respond(msg, t("en", "nothing_to_resume"))
             return
         _, kb_config = project_config.knowledge_base
         kb = self.deps.make_sources(active["project"], project_config)
@@ -557,7 +779,8 @@ class MeetingSession:
         ]
         await self._join(m)
         await self._send_optouts(m)
-        await self._reply(msg, t(m.lang, "meeting_resumed"))
+        await self._post_notice(m, kb_config)  # people may have joined since
+        await self._respond(msg, t(m.lang, "meeting_resumed"))
         self._save_state()
         m.code_sync = asyncio.create_task(self._sync_code(m))
 
@@ -582,12 +805,12 @@ class MeetingSession:
     async def _retry_publish(self, msg: dict[str, Any]) -> None:
         candidates = [(d, s) for d, s in self._states() if any(LocalKeeper.of_meeting(d).kept())]
         if not candidates:
-            await self._reply(msg, t(self._lang(), "retry_publish_none"))
+            await self._respond(msg, t(self._lang(), "retry_publish_none"))
             return
         directory, state = candidates[0]
         project_config = self.deps.config.projects.get(state.get("project", ""))
         if project_config is None:
-            await self._reply(msg, t(self._lang(), "retry_publish_none"))
+            await self._respond(msg, t(self._lang(), "retry_publish_none"))
             return
         _, kb_config = project_config.knowledge_base
         publisher = self.deps.make_publisher(kb_config)
@@ -644,7 +867,7 @@ class MeetingSession:
             lines.insert(
                 0, t(self._lang(), "retry_publish_done", count=len(urls), urls=", ".join(urls))
             )
-        await self._reply(msg, "\n".join(lines) or t(self._lang(), "retry_publish_none"))
+        await self._respond(msg, "\n".join(lines) or t(self._lang(), "retry_publish_none"))
 
     # -- meeting lifecycle ---------------------------------------------------------------
 
@@ -660,11 +883,14 @@ class MeetingSession:
         start_ms: int,
         meeting_date: date,
         next_utterance: int = 0,
+        assembler: UtteranceAssembler | None = None,
     ) -> ActiveMeeting:
         directory = self._meetings_dir / meeting_id
         (directory / "audio").mkdir(parents=True, exist_ok=True)
         defaults = self.deps.config.defaults
-        sink = ConnectorSink(self.deps.link, text_channel_id)
+        sink = ConnectorSink(
+            self.deps.link, text_channel_id, buttons=self._buttons, lang=kb.conventions.language
+        )
         agent = MeetingAgent(
             kb=kb,
             fast=self.deps.fast,
@@ -714,7 +940,7 @@ class MeetingSession:
             prompt=prompt,
             agent=agent,
             sink=sink,
-            assembler=UtteranceAssembler(directory / "audio", next_utterance),
+            assembler=assembler or UtteranceAssembler(directory / "audio", next_utterance),
             pipeline=pipeline,
         )
         m.consumer = asyncio.create_task(self._consume(m))

@@ -89,8 +89,15 @@ class ConnectorLink:
         if (
             hello is None
             or hello["type"] != "hello"
-            or hello.get("protocol") != PROTOCOL_VERSION
             or not hmac.compare_digest(str(hello.get("secret", "")), self._secret)
         ):
+            return None
+        if hello.get("protocol") != PROTOCOL_VERSION:
+            log.error(
+                "refusing a connector speaking protocol %s, the core speaks %s: update the "
+                "connector and the core from the same checkout",
+                hello.get("protocol"),
+                PROTOCOL_VERSION,
+            )
             return None
         return hello

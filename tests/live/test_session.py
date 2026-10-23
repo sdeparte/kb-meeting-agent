@@ -18,7 +18,7 @@ async def test_start_joins_posts_the_notice_and_replies(make_session):
     session, link, clock, _ = make_session()
     await start(session)
     assert link.of("join") == [{"voice_channel_id": "v1", "text_channel_id": "t1"}]
-    assert "acme/kb" in link.texts()[0] and "/meeting optout" in link.texts()[0]
+    assert "acme/kb" in link.texts()[0] and "!optout" in link.texts()[0]
     assert link.of("reply")[-1]["text"] == "Meeting started with the test project."
     state = json.loads((session.meeting.dir / "state.json").read_text(encoding="utf-8"))
     assert state["status"] == "active" and state["project"] == "test"
@@ -118,8 +118,9 @@ async def test_bots_do_not_keep_the_meeting_alive(make_session):
     await session.on_event(
         "message", {"type": "members", "members": [{"id": "bot", "name": "Scribe", "bot": True}]}
     )
-    await asyncio.sleep(0.2)
-    assert session.meeting is None
+    async with asyncio.timeout(10):  # the close syncs the KB: its time varies with the load
+        while session.meeting is not None:
+            await asyncio.sleep(0.02)
     assert link.of("leave") == [{}]
 
 

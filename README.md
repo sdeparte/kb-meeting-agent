@@ -120,7 +120,7 @@ The agent clones (or updates) the project's repositories, indexes them, then fee
 | Option | Effect |
 |---|---|
 | `--config PATH` | configuration file (default `config.yml`) |
-| `--project NAME` | project to use, as named in `config.yml` (required) |
+| `--project NAME` | project to use, as named in `config.yml` (default: `defaults.project`, or the only project) |
 | `--out DIR` | output directory (default `replay-out/`) |
 | `--level silent\|contradictions\|context` | how often the agent speaks up on its own (default from `config.yml`) |
 | `--auto-validate` | validate every detected decision, to see the decision records it would open |
@@ -150,25 +150,17 @@ One JSON object per line, times in seconds from the start of the meeting:
 
 The agent answers when its `agent.name`, or one of its `agent.aliases`, appears in a segment (`Scribe` in the example configuration).
 
-## Add the agent to a Discord server
+## Live meetings
 
-### 1. Create the bot
+The core joins live meetings through a **connector**: a separate process that brings the agent into a meeting platform and relays audio and chat. One connector runs at a time, chosen in `config.yml` under `connector:`. Each connector's README explains how to create its accounts and configure it:
 
-1. At <https://discord.com/developers/applications>, create an application.
-2. **Bot** tab: **Reset Token** and keep the token; turn **Public Bot** off.
-3. **OAuth2 → URL Generator**: scopes `bot` and `applications.commands`; permissions *View Channels*, *Send Messages*, *Connect*, *Use Application Commands*. Open the URL and add the bot to your server.
-4. Check the voice channels you will use: a channel or category override that denies **Connect** to the bot's role blocks the voice connection without a clear error.
-5. In Discord, enable developer mode (Settings → Advanced), right-click the server → **Copy Server ID**.
+| Platform | Connector |
+|---|---|
+| Discord voice channels | [connector-discord](connector-discord/README.md) |
 
-### 2. Configure
+### Configure transcription
 
 ```yaml
-connector:
-  name: discord
-  env:
-    DISCORD_TOKEN: "${DISCORD_TOKEN}"
-    DISCORD_GUILD_ID: "123456789012345678"
-
 transcription:
   language: fr
   live:  { provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo }   # Mac
@@ -177,46 +169,56 @@ transcription:
 
 On Linux or WSL, use `provider: faster-whisper` (`model: small` on CPU, `large-v3` on a CUDA GPU). Every option is in [docs/configuration.md](docs/configuration.md#connector-and-transcription).
 
-### 3. Install and run
+### Run
 
 ```bash
 uv sync --extra mlx          # macOS on Apple Silicon; use --extra faster elsewhere
-(cd connector-discord && npm ci)
-export DISCORD_TOKEN=... GITHUB_TOKEN=... ANTHROPIC_API_KEY=...
+export GITHUB_TOKEN=... ANTHROPIC_API_KEY=...   # plus the connector's own variables
 uv run kb-meeting-agent run
 ```
 
-The agent registers its slash commands on the server, starts the connector and restarts it if it stops. Stop it with Ctrl+C: a running meeting is closed first.
+The core starts the connector and restarts it if it stops. Stop it with Ctrl+C: a running meeting is closed first.
 
-### 4. Hold a meeting
+### Commands
+
+The same commands work on every platform. Type them in the meeting's chat; both the French and the English words are accepted, and the agent answers in the KB's language. Connectors that have slash commands and buttons (Discord) offer them too, for the same commands.
 
 | Command | Effect |
 |---|---|
-| `/meeting start project:<name> [level]` | joins your voice channel and posts the recording notice |
-| `/ask <question>` | answers from the KB (and the code, for questions about it) |
-| `/meeting level <level>` | `silent`, `contradictions` or `context` |
-| `/meeting optout` | stops transcribing your voice |
-| `/meeting end` | writes the minutes and opens the pull requests |
-| `/meeting resume` | resumes a meeting interrupted by a crash |
-| `/meeting retry-publish` | publishes pull requests kept after a failed publication |
+| `!start [project] [level]` | start the meeting (how the agent joins depends on the platform: see its connector) |
+| `!projet <name>` / `!project <name>` | change the project, only until the agent has said anything |
+| `!fin` / `!end` | write the minutes and open the pull requests; the agent leaves |
+| `!question <question>` / `!ask <question>` | answer from the KB and the code |
+| `!niveau <level>` / `!level <level>` | `silent`, `contradictions` or `context` |
+| `!optout` | stop transcribing your voice |
+| `!reprendre` / `!resume` | resume the last meeting interrupted by a crash |
+| `!republier` / `!retry-publish` | publish pull requests kept after a failed publication |
+| `!valider dN` / `!validate dN` | validate proposed decision N (its id is in the proposal: "Decision d2 detected: …") |
+| `!ignorer dN` / `!ignore dN` | ignore proposed decision N |
+| `!modifier dN <statement>` / `!edit dN <statement>` | reword proposed decision N, then validate it |
+| `!aide` / `!help` | list the commands |
 
-Participants can also address the agent by voice, by its `agent.name` ("Scribe, …"). It says at once what it is about to do ("🔎 Searching the KB: …", or drafting a validated decision), then answers in reply to that message. Every exchange with it (questions and answers, contradictions it pointed out, decisions it proposed and who validated them) is woven into the minutes, which name it "Scribe (AI)". The agent leaves when nobody is left in the channel for `auto_leave_empty_minutes`.
+A meeting uses `defaults.project`, or the only project when there is one; `!start <project>` names another. `!start` in a call whose meeting was interrupted by a crash today offers to resume it: `!resume` picks it up, `!start` again starts a new meeting.
 
-**Audio and privacy.** Audio is kept on the agent's machine until the minutes are published (for the second transcription pass), then deleted. `/meeting optout` deletes your recorded audio at once; what you said before stays in the transcript. Meeting folders are deleted after `transcript_retention_days`. The full transcript is never published. Everyone in the channel sees the recording notice when the meeting starts.
+Changing the project, ending the meeting, changing the level and acting on decisions are for the meeting's participants: from its call or its text channel. A `!` word that is not a command is left to other bots, except in the meeting's text channel, where it gets the help.
+
+Participants can also address the agent by voice, by its `agent.name` ("Scribe, …"). It says at once what it is about to do ("🔎 Searching the KB: …", or drafting a validated decision), then answers in reply to that message. Every exchange with it (questions and answers, contradictions it pointed out, decisions it proposed and who validated them) is woven into the minutes, which name it "Scribe (AI)". The agent leaves when nobody is left in the meeting for `auto_leave_empty_minutes`.
+
+**Audio and privacy.** Audio is kept on the agent's machine until the minutes are published (for the second transcription pass), then deleted. `!optout` deletes your recorded audio at once; what you said before stays in the transcript. Meeting folders are deleted after `transcript_retention_days`. The full transcript is never published. Everyone in the meeting sees the recording notice when it starts.
 
 **Headsets.** Without one, a participant's microphone picks up the people around them, and their words end up in that participant's transcript.
 
-**Docker (Linux, WSL).** `docker build -t kb-meeting-agent .`, then `docker run --rm -v "$PWD/config:/config" -v "$PWD/data:/data" -e DISCORD_TOKEN -e GITHUB_TOKEN -e ANTHROPIC_API_KEY kb-meeting-agent`, with `data_dir: /data` in `config/config.yml`. The image transcribes on the CPU with faster-whisper. Stopping the container closes the running meeting first (second pass, minutes): give it time with `docker stop --time 600` (or `stop_grace_period` in Compose).
+**Docker (Linux, WSL, Discord only).** `docker build -t kb-meeting-agent .`, then `docker run --rm -v "$PWD/config:/config" -v "$PWD/data:/data" -e DISCORD_TOKEN -e GITHUB_TOKEN -e ANTHROPIC_API_KEY kb-meeting-agent`, with `data_dir: /data` in `config/config.yml`. The image transcribes on the CPU with faster-whisper. Stopping the container closes the running meeting first (second pass, minutes): give it time with `docker stop --time 600` (or `stop_grace_period` in Compose).
 
 ### Troubleshooting
 
+Platform-specific problems are in each connector's README.
+
 | Symptom | Cause |
 |---|---|
-| `403 Missing Access (50001)` at startup | the bot is not on the server given by `DISCORD_GUILD_ID` (in `connector.env`) |
-| The bot never joins; "voice connection timed out" | a channel or category override denies *Connect* |
-| "Unknown Integration" on a command | Discord cached old command ids: reload Discord (Ctrl+R) |
 | "Transcription is running N s behind" | the live engine is too slow for the machine: set `temperature_fallback: false` on `transcription.live`, then try a smaller model |
 | Phrases missing when people talk over each other | compare `utterances.jsonl` and `transcript.jsonl` in the meeting folder, and `stats.jsonl` for receive errors |
+| The connector is refused (core log) | the connector and the core speak different protocol versions: update both from the same checkout |
 
 Meeting folders live in `<data_dir>/meetings/<date>-<id>/`.
 
@@ -225,7 +227,7 @@ Meeting folders live in `<data_dir>/meetings/<date>-<id>/`.
 - **Answers** use only excerpts of the project's repositories. KB pages are cited as `path#section`, code as `[Tag] repo:path:start-end` with a link to those lines on GitHub; the agent tells what the code does apart from what the KB says. When nothing covers the question, it says so.
 - **Code** is read only: it is never used to contradict a statement, and the agent never writes to a code repository.
 - **Contradictions** are posted only when the model is confident, when the quoted line really exists in the cited file, and once per subject. The agent shows the full KB line, says "the KB says…" rather than "this is wrong", and warns when the page has not been verified recently.
-- **Decisions** are proposed with Validate / Edit / Ignore buttons; in a live meeting they can also be validated by voice (Edit needs a live connector: it does nothing in replay). A validated decision becomes a pull request with the record, the transcript lines it comes from (labelled as context when the exact line could not be found), the KB pages that probably need an update (not modified), and the code files it probably requires changing. If publishing fails, the files are kept under `unpublished/`.
+- **Decisions** are proposed with Validate / Edit / Ignore buttons, or with the `!validate dN` / `!edit dN …` / `!ignore dN` commands to type on platforms without buttons; in a live meeting they can also be validated by voice (Edit needs a live connector: it does nothing in replay). A validated decision becomes a pull request with the record, the transcript lines it comes from (labelled as context when the exact line could not be found), the KB pages that probably need an update (not modified), and the code files it probably requires changing. If publishing fails, the files are kept under `unpublished/`.
 - **Minutes** are written at the end in two passes (summaries of 10-minute slices, then a synthesis) and published as a pull request. The full transcript is never published; decision pull requests quote only the relevant lines, with speaker and time.
 
 ## Development

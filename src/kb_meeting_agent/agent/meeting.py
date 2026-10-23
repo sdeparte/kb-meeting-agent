@@ -119,6 +119,8 @@ class MeetingAgent:
         self.transcript = transcript
         self.settings = settings
         self.level: InterventionLevel = settings.level
+        # Whether the agent has posted or answered anything: the project can change until then.
+        self.acted = False
         self.previous_level: InterventionLevel = settings.level  # what "as before" goes back to
         self.decisions: dict[str, PendingDecision] = {}
         self.flags: list[Flag] = []
@@ -151,6 +153,7 @@ class MeetingAgent:
         self.interactions.append(Interaction(self._latest_end, text))
 
     async def _say(self, text: str, buttons: tuple[Button, ...] = ()) -> str:
+        self.acted = True
         return await self.sink.send(OutMessage(text=text, buttons=buttons, reply_to=self._thread))
 
     @asynccontextmanager
@@ -271,7 +274,8 @@ class MeetingAgent:
             Button(f"decision:{decision_id}:edit", t(self._lang, "button_edit"), modal=edit),
             Button(f"decision:{decision_id}:ignore", t(self._lang, "button_ignore")),
         )
-        await self._say(t(self._lang, "decision_detected", statement=candidate.statement), buttons)
+        detected = t(self._lang, "decision_detected", id=decision_id, statement=candidate.statement)
+        await self._say(detected, buttons)
 
     async def _check(self, claim: Claim) -> None:
         subject = claim.subject.casefold().strip()
@@ -376,6 +380,7 @@ class MeetingAgent:
             await self._say(t(self._lang, "level_changed", level=level))
 
     async def ask(self, question: str, user: str | None = None) -> str:
+        self.acted = True
         context = format_segments(self.transcript.window(self.settings.window_s))
         try:
             text = await answer_question(
@@ -625,6 +630,7 @@ class MeetingAgent:
         return {
             "level": self.level,
             "previous_level": self.previous_level,
+            "acted": self.acted,
             "summary": self._summary,
             "extracted": self._extracted,
             "latest_end": self._latest_end,
@@ -653,6 +659,7 @@ class MeetingAgent:
     def restore(self, state: dict[str, Any]) -> None:
         self.level = state["level"]
         self.previous_level = state.get("previous_level", self.level)
+        self.acted = state.get("acted", False)
         self._summary = state["summary"]
         self._extracted = state["extracted"]
         self._latest_end = state["latest_end"]

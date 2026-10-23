@@ -1,7 +1,8 @@
-// Connector <-> core protocol, version 2. Mirrors src/kb_meeting_agent/live/protocol.py.
-// Ids (users, channels, interactions) are opaque strings: here, Discord snowflakes. A user has
+// Connector <-> core protocol. Mirrors src/kb_meeting_agent/live/protocol.py, which
+// documents the messages; every connector keeps an identical copy of this file.
+// Ids (users, channels, interactions) are opaque strings chosen by the connector. A user has
 // one id: the userId of audio frames and `speaking` is the user.id of interactions (opt-out).
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 // Exit code when the env is refused (a missing credential): the core does not restart us
 export const CONFIG_ERROR_EXIT = 78;
 export const AUDIO_FRAME = 0x01;

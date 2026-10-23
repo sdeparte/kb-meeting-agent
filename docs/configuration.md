@@ -99,6 +99,7 @@ Patterns match the whole path or the file name; `*` also matches `/`. Files are 
 
 | Key | Default | Meaning |
 |---|---|---|
+| `project` | the only project | project a meeting uses when `!start` names none; **required** when `projects` has several entries. `!project <name>` changes it during a meeting, until the agent has said anything |
 | `intervention_level` | `contradictions` | `silent`: speaks only when addressed. `contradictions`: also flags statements that contradict the KB. `context`: also links related KB pages. |
 | `contradiction_min_confidence` | `0.8` | minimum model confidence (0 to 1) to post a contradiction |
 | `context_min_interval_minutes` | `5` | minimum delay between two "related page" messages |
@@ -126,6 +127,8 @@ The connector is the process that joins meetings on a platform and relays audio,
 A connector that exits with code 78 refuses its `env` (`connector-discord` does when a variable below is missing): it is not restarted and `run` stops with an error. Any other exit is restarted with backoff.
 
 The connector receives `env`, `PATH`, `HOME`, the locale and temporary-folder variables, and the local connection details (`KBMA_CORE_URL`, `KBMA_SECRET`, which `env` cannot override): never model keys or repository tokens.
+
+The connector and the core speak the protocol of `live/protocol.py` (version 3); a connector from another version is refused. The core sends the connector its command catalog when it connects, so the commands are the same on every platform (see [Commands](../README.md#commands)).
 
 `connector-discord` reads:
 

@@ -43,3 +43,13 @@ async def speak(session, user="u1", name="Alice", start=1_000, ms=1_000):
     )
     await session.on_event("audio", AudioFrame(user, start, bytes(BYTES_PER_MS * ms)))
     await session.on_event("message", {"type": "utterance_end", "user_id": user, "t": start + ms})
+
+
+def chat(text, user=("u1", "Alice"), voice="v1", text_channel="t1"):
+    return {
+        "type": "chat",
+        "text": text,
+        "user": {"id": user[0], "name": user[1]},
+        "text_channel_id": text_channel,
+        "voice_channel_id": voice,
+    }

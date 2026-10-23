@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import { AUDIO_FRAME, PROTOCOL_VERSION, decodeAudioFrame, encodeAudioFrame, message, parseMessage } from "../src/protocol.js";
 
-test("protocol version 2", () => {
-  assert.equal(PROTOCOL_VERSION, 2);
+test("protocol version 3", () => {
+  assert.equal(PROTOCOL_VERSION, 3);
 });
 
 for (const userId of ["18446744073709551615", "U0123ABCD", "spaces/abc-defg-hij/participants/9f8e7d", "Zoé"]) {

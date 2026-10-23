@@ -1,9 +1,13 @@
-"""Connector <-> core protocol, version 2. Mirrored by connector-discord/src/protocol.js.
+"""Connector <-> core protocol, version 3. Mirrored by every connector-*/src/protocol.js.
 
 Platform-neutral: ids (users, channels, interactions) are opaque strings chosen by the
 connector, such as a Discord snowflake, a Slack user id or a Meet participant resource name.
 A user has one id: the `user_id` of audio frames and `speaking` is the `user.id` of their
 commands, buttons and modals, which opt-out relies on.
+
+Version 3: the connector's `hello` may carry `capabilities` (`buttons: false` when it cannot
+show buttons); the core sends the command catalog in a `commands` message once connected,
+and the connector forwards chat lines starting with `!` as `chat` messages.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import struct
 from dataclasses import dataclass
 from typing import Any
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 # Exit code of a connector refusing its env (a missing credential): it is not restarted
 CONFIG_ERROR_EXIT = 78
 AUDIO_FRAME = 0x01

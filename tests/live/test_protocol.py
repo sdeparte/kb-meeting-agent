@@ -29,7 +29,7 @@ def test_audio_frame_round_trip_with_any_speaker_id(user_id):
 
 
 def test_protocol_version():
-    assert PROTOCOL_VERSION == 2
+    assert PROTOCOL_VERSION == 3
 
 
 @pytest.mark.parametrize("user_id", ["", "x" * 256])
