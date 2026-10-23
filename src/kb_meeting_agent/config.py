@@ -135,10 +135,17 @@ class ConnectorConfig(_Strict):
 
     name: Annotated[str, StringConstraints(pattern=r"^[a-z0-9-]+$")]
     # Default: [node, <dir>/src/index.js], dir defaulting to connector-<name>/ of this checkout
-    command: list[str] | None = None
+    command: list[str] | None = Field(None, min_length=1)
     node: str = "node"
     dir: Path | None = None
     env: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _default_command_options(self) -> ConnectorConfig:
+        ignored = sorted(self.model_fields_set & {"node", "dir"})
+        if self.command and ignored:
+            raise ValueError(f"{' and '.join(ignored)} only build the default command")
+        return self
 
 
 # The engines each engine-specific option of TranscriberRole applies to. Adding an engine
