@@ -18,7 +18,7 @@ async def test_start_joins_posts_the_notice_and_replies(make_session):
     session, link, clock, _ = make_session()
     await start(session)
     assert link.of("join") == [{"voice_channel_id": "v1", "text_channel_id": "t1"}]
-    assert "acme/kb" in link.texts()[0] and "/meeting optout" in link.texts()[0]
+    assert "acme/kb" in link.texts()[0] and "!optout" in link.texts()[0]
     assert link.of("reply")[-1]["text"] == "Meeting started with the test project."
     state = json.loads((session.meeting.dir / "state.json").read_text(encoding="utf-8"))
     assert state["status"] == "active" and state["project"] == "test"

@@ -68,7 +68,8 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "This meeting is transcribed by {name}, an AI agent. Say “{name}, …” to ask it a "
             "question. Audio stays on the agent's machine until the minutes are published, then "
             "it is deleted. The minutes and the validated decisions will be proposed as pull "
-            "requests in {repo}. Use /meeting optout to stop transcribing your voice."
+            "requests in {repo}. Type !optout to stop transcribing your voice; !help lists the "
+            "commands."
         ),
         "meeting_started": "Meeting started with the {project} project.",
         "meeting_already_running": "A meeting is already running.",
@@ -232,8 +233,8 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "Cette réunion est transcrite par {name}, un agent IA. Dites « {name}, … » pour lui "
             "poser une question. L'audio reste sur la machine de l'agent jusqu'à la publication "
             "du compte rendu, puis il est supprimé. Le compte rendu et les décisions validées "
-            "seront proposés en pull request dans {repo}. Utilisez /meeting optout pour ne plus "
-            "être transcrit."
+            "seront proposés en pull request dans {repo}. Tapez !optout pour ne plus être "
+            "transcrit ; !aide liste les commandes."
         ),
         "meeting_started": "Réunion démarrée avec le projet {project}.",
         "meeting_already_running": "Une réunion est déjà en cours.",
