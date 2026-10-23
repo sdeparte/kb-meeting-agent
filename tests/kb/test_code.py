@@ -152,7 +152,11 @@ async def test_files_holding_a_secret_are_not_indexed(tmp_path):
         "src/deploy.py": "KEY = '''-----BEGIN RSA PRIVATE KEY-----\nabc\n'''\n",
         "src/ci.py": "TOKEN = 'ghp_" + "a" * 36 + "'\n",
         "src/aws.py": "ACCESS = 'AKIA" + "A" * 16 + "'\n",
-        "src/ok.py": "COOLDOWN = 30\n",
+        "src/pay.py": "STRIPE = 'sk_live_" + "a" * 24 + "'\n",
+        "src/maps.dart": "const key = 'AIza" + "B" * 35 + "';\n",
+        "ci/gitlab.sh": "export T=glpat-" + "c" * 20 + "\n",
+        "src/db.py": "URL = 'postgres://app:Hunter2pw@db.internal/app'\n",
+        "src/ok.py": "COOLDOWN = 30\nDOCS = 'https://example.com/a:b@c'\n",
     }
     from conftest import make_kb_repo
 
@@ -160,7 +164,28 @@ async def test_files_holding_a_secret_are_not_indexed(tmp_path):
     repo = code_repo(tmp_path, origin)
     await repo.sync()
     assert repo.exists("src/ok.py")
-    assert not any(repo.exists(path) for path in ("src/deploy.py", "src/ci.py", "src/aws.py"))
+    secrets = ("src/deploy.py", "src/ci.py", "src/aws.py", "src/pay.py", "src/maps.dart")
+    assert not any(repo.exists(path) for path in (*secrets, "ci/gitlab.sh", "src/db.py"))
+    repo.close()
+
+
+async def test_a_file_holding_a_secret_is_read_once_while_unchanged(
+    tmp_path, code_origin, monkeypatch, caplog
+):
+    from kb_meeting_agent.kb import code
+
+    commit_file(code_origin, "src/ci.py", "TOKEN = 'ghp_" + "a" * 36 + "'\n")
+    repo = code_repo(tmp_path, code_origin)
+    await repo.sync()
+    read = []
+    original = code._read_source
+    monkeypatch.setattr(code, "_read_source", lambda path: read.append(path) or original(path))
+    caplog.clear()
+    await repo.sync()
+    assert read == [] and "holds a secret" not in caplog.text
+    commit_file(code_origin, "src/ci.py", "TOKEN = None\n")
+    await repo.sync()
+    assert repo.exists("src/ci.py")
     repo.close()
 
 
