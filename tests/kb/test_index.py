@@ -129,3 +129,36 @@ async def test_vectors_are_loaded_once_until_the_index_changes(index, monkeypatc
     assert len(loads) == 2
     index.remove_file("b.md")
     assert all(c.path != "b.md" for c in await index.search("zeppelin", k=5))
+
+
+async def test_another_writer_on_the_same_file_refreshes_the_vectors(index, tmp_path):
+    await index.upsert_file("a.md", "h", [chunk("a.md", "cooldown alpha")])
+    await index.search("cooldown", k=1)  # vectors loaded
+    other = SearchIndex(tmp_path / "index.sqlite", FakeProvider().embed)
+    await other.upsert_file("c.md", "h", [chunk("c.md", "zeppelin")])
+    await other.upsert_file("a.md", "h2", [chunk("a.md", "cooldown alpha")])
+    other.remove_file("c.md")
+    other.close()
+    assert [c.path for c in await index.search("zeppelin cooldown", k=5)] == ["a.md"]
+
+
+async def test_a_file_reindexed_during_a_search_is_left_out_not_a_crash(tmp_path):
+    import asyncio
+
+    fake = FakeProvider()
+    release = asyncio.Event()
+
+    async def slow_embed(texts):
+        if texts == ["cooldown"]:
+            await release.wait()
+        return await fake.embed(texts)
+
+    index = SearchIndex(tmp_path / "index.sqlite", slow_embed)
+    await index.upsert_file("a.md", "h", [chunk("a.md", "cooldown alpha")])
+    await index.upsert_file("b.md", "h", [chunk("b.md", "cooldown beta")])
+    search = asyncio.create_task(index.search("cooldown", k=5))
+    await asyncio.sleep(0)  # the lexical ids are taken, the query embedding waits
+    await index.upsert_file("a.md", "h2", [chunk("a.md", "something else")])
+    release.set()
+    assert {c.path for c in await search} <= {"a.md", "b.md"}
+    index.close()

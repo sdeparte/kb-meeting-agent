@@ -54,6 +54,7 @@ class SearchIndex:
         self._db.commit()
         self._embed = embed
         self._vectors: tuple[list[int], np.ndarray] | None = None  # ids, normalised rows
+        self._vectors_version = 0  # PRAGMA data_version they were loaded at
 
     def close(self) -> None:
         self._db.close()
@@ -128,7 +129,8 @@ class SearchIndex:
         for chunk_id, row in rows.items():
             if row.path in boosted:
                 scores[chunk_id] *= AUTHORITATIVE_BOOST
-        top = sorted(scores, key=lambda chunk_id: scores[chunk_id], reverse=True)[:k]
+        # an id missing from rows was removed during the embedding await (a resync)
+        top = sorted(rows, key=lambda chunk_id: scores[chunk_id], reverse=True)[:k]
         return [rows[chunk_id] for chunk_id in top]
 
     def section(self, path: str, headings: tuple[str, ...], text: str) -> list[Chunk]:
@@ -168,9 +170,13 @@ class SearchIndex:
         ]
 
     def _semantic(self, query_vector: list[float], limit: int) -> list[int]:
-        if self._vectors is None:  # loaded once, until the index changes
+        # loaded once, until the index changes here or in another connection to the same file
+        version = self._db.execute("PRAGMA data_version").fetchone()[0]
+        if self._vectors is None or version != self._vectors_version:
+            self._vectors_version = version
             rows = self._db.execute("SELECT id, vector FROM chunks").fetchall()
             if not rows:
+                self._vectors = None
                 return []
             matrix = np.stack([np.frombuffer(row[1], dtype=np.float32) for row in rows])
             norms = np.linalg.norm(matrix, axis=1, keepdims=True)
