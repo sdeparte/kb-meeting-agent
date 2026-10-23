@@ -145,6 +145,8 @@ connector:
     DISCORD_GUILD_ID: "123456789012345678"
 ```
 
+`connector-slack` reads `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_AGENT_USER_ID`, `SLACK_WORKSPACE_URL`, `SLACK_BROWSER_PROFILE` and `SLACK_HEADLESS`: see [connector-slack/README.md](../connector-slack/README.md#3-configure).
+
 ### `transcription`
 
 | Key | Default | Meaning |

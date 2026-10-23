@@ -9,12 +9,12 @@ An agent that joins a voice meeting, listens, and works with a knowledge base (K
 
 Models are pluggable: Claude through the Anthropic API, or any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, mlx-lm) for a fully local setup.
 
-> **Status.** The agent joins Discord voice channels (`kb-meeting-agent run`) and can replay a recorded transcript (`kb-meeting-agent replay`). Other meeting platforms are not supported yet.
+> **Status.** The agent joins Discord voice channels and, unofficially, Slack huddles (`kb-meeting-agent run`), and can replay a recorded transcript (`kb-meeting-agent replay`).
 
 ## Requirements
 
 - Python 3.12 and [uv](https://docs.astral.sh/uv/)
-- Node.js 22.12 or later, for the Discord connector
+- Node.js 22.12 or later, for the connectors
 - Git
 - A KB: a Git repository of Markdown files, hosted on GitHub to publish pull requests
 - One of:
@@ -157,6 +157,7 @@ The core joins live meetings through a **connector**: a separate process that br
 | Platform | Connector |
 |---|---|
 | Discord voice channels | [connector-discord](connector-discord/README.md) |
+| Slack huddles | [connector-slack](connector-slack/README.md) (unofficial: drives a dedicated account in a browser) |
 
 ### Configure transcription
 
@@ -181,7 +182,7 @@ The core starts the connector and restarts it if it stops. Stop it with Ctrl+C: 
 
 ### Commands
 
-The same commands work on every platform. Type them in the meeting's chat; both the French and the English words are accepted, and the agent answers in the KB's language. Connectors that have slash commands and buttons (Discord) offer them too, for the same commands.
+The same commands work on every platform. Type them in the meeting's chat; both the French and the English words are accepted, and the agent answers in the KB's language. Connectors that have slash commands and buttons (Discord, Slack) offer them too, for the same commands.
 
 | Command | Effect |
 |---|---|
@@ -236,6 +237,8 @@ Meeting folders live in `<data_dir>/meetings/<date>-<id>/`.
 uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
 (cd connector-discord && npm test)
+(cd connector-browser && npm ci && npx playwright install chromium && npm test)
+(cd connector-slack && npm ci && npm test)
 ```
 
 ## License
