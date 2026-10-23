@@ -70,5 +70,7 @@ def test_speaker_ids_that_are_not_safe_file_names_are_hashed(tmp_path):
     utterance = assembler.end(speaker, 1000)
     assert utterance.path.parent == tmp_path
     assert utterance.path.name == f"00000-{speaker_file_id(speaker)}.wav"
-    assert speaker_file_id(speaker).isalnum()
+    assert speaker_file_id(speaker)[1:].isalnum()
     assert speaker_file_id("U0123ABCD") == "U0123ABCD"
+    # A platform id shaped like a hash stays distinct from the hash itself
+    assert speaker_file_id(speaker_file_id(speaker)[1:]) != speaker_file_id(speaker)
