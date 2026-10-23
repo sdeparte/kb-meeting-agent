@@ -312,3 +312,18 @@ async def test_retry_publish_skips_a_decision_whose_number_is_now_taken(make_ses
     assert publisher.prs == []
     assert "decision number 0003 is now used" in link.of("reply")[-1]["text"]
     assert any(kept.rglob("PR.md"))
+
+
+async def test_optout_deletes_the_audio_of_a_speaker_id_that_is_not_a_file_name(make_session):
+    session, *_ = make_session()
+    await start(session)
+    speaker = "spaces/abc/participants/7"  # a Meet participant
+    await speak(session, user="u1", name="Alice")
+    await speak(session, user=speaker, name="Bob", start=3_000)
+    await session.settle()
+    audio = session.meeting.dir / "audio"
+    assert len(list(audio.glob("*.wav"))) == 2
+    await session.on_event(
+        "message", command("meeting_optout", interaction="i2", user=(speaker, "Bob"))
+    )
+    assert [path.name for path in audio.glob("*.wav")] == ["00000-u1.wav"]

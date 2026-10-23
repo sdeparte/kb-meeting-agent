@@ -19,7 +19,7 @@ from kb_meeting_agent.agent.prompting import format_timestamp
 from kb_meeting_agent.agent.transcript import Transcript
 from kb_meeting_agent.config import AppConfig, ProjectConfig, RepoConfig, TranscriptionConfig
 from kb_meeting_agent.kb.project import ProjectSources
-from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler
+from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler, speaker_file_id
 from kb_meeting_agent.live.pipeline import TranscriptionPipeline
 from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.base import LLMProvider
@@ -479,7 +479,7 @@ class MeetingSession:
         user_id = msg["user"]["id"]
         m.opted_out.add(user_id)
         m.assembler.opt_out(user_id)
-        for path in (m.dir / "audio").glob(f"*-{user_id}.wav"):
+        for path in (m.dir / "audio").glob(f"*-{speaker_file_id(user_id)}.wav"):
             path.unlink(missing_ok=True)
         await self.deps.link.send("optout", user_id=user_id)
         self._save_state()

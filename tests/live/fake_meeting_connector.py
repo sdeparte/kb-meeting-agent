@@ -14,7 +14,7 @@ async def main() -> None:
     log = open(sys.argv[1], "a", encoding="utf-8")
     async with connect(os.environ["KBMA_CORE_URL"]) as ws:
         await ws.send(
-            json.dumps({"type": "hello", "secret": os.environ["KBMA_SECRET"], "protocol": 1})
+            json.dumps({"type": "hello", "secret": os.environ["KBMA_SECRET"], "protocol": 2})
         )
         await ws.send(
             json.dumps(
@@ -45,7 +45,7 @@ async def main() -> None:
                         }
                     )
                 )
-                await ws.send(struct.pack(">BQQ", 1, 42, now) + bytes(32 * 1000))
+                await ws.send(struct.pack(">BQB", 1, now, 2) + b"42" + bytes(32 * 1000))
                 await ws.send(
                     json.dumps({"type": "utterance_end", "user_id": "42", "t": now + 1000})
                 )
