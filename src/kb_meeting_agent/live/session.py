@@ -17,7 +17,7 @@ from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
 from kb_meeting_agent.agent.transcript import Transcript
-from kb_meeting_agent.config import AppConfig, KbConfig, TranscriptionConfig
+from kb_meeting_agent.config import AppConfig, RepoConfig, TranscriptionConfig
 from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler
 from kb_meeting_agent.live.pipeline import TranscriptionPipeline
 from kb_meeting_agent.live.protocol import AudioFrame
@@ -93,8 +93,8 @@ class SessionDeps:
     strong: LLMProvider
     live_transcriber: Transcriber
     final_transcriber: Transcriber | None
-    make_kb: Callable[[str, KbConfig], SyncableKnowledgeBase]
-    make_publisher: Callable[[KbConfig], Publisher]
+    make_kb: Callable[[str, str, RepoConfig], SyncableKnowledgeBase]  # project, repo name
+    make_publisher: Callable[[RepoConfig], Publisher]
     clock_ms: Callable[[], int] = field(default=lambda: int(time.time() * 1000))
     today: Callable[[], date] = date.today
 
@@ -103,7 +103,7 @@ class SessionDeps:
 class ActiveMeeting:
     id: str
     dir: Path
-    kb_name: str
+    project: str
     kb: SyncableKnowledgeBase
     publisher: Publisher
     voice_channel_id: str
@@ -406,18 +406,19 @@ class MeetingSession:
         if not msg.get("voice_channel_id"):
             await self._reply(msg, t("en", "join_voice_first"))
             return
-        kb_name = msg["options"].get("kb")
-        kb_config = self.deps.config.knowledge_bases.get(kb_name or "")
-        if kb_config is None:
-            names = ", ".join(sorted(self.deps.config.knowledge_bases))
-            await self._reply(msg, t("en", "unknown_kb", names=names))
+        project = msg["options"].get("project") or ""
+        found = self._knowledge_base(project)
+        if found is None:
+            names = ", ".join(sorted(self.deps.config.projects))
+            await self._reply(msg, t("en", "unknown_project", names=names))
             return
         self._purge_expired()
-        kb = self.deps.make_kb(kb_name, kb_config)
+        kb_name, kb_config = found
+        kb = self.deps.make_kb(project, kb_name, kb_config)
         await kb.sync()
         m = self._open(
             meeting_id=f"{self.deps.today().isoformat()}-{uuid.uuid4().hex[:6]}",
-            kb_name=kb_name,
+            project=project,
             kb=kb,
             kb_config=kb_config,
             voice_channel_id=msg["voice_channel_id"],
@@ -432,7 +433,7 @@ class MeetingSession:
             m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
         )
         await m.sink.send(OutMessage(notice))
-        await self._reply(msg, t(m.lang, "meeting_started", kb=kb_name))
+        await self._reply(msg, t(m.lang, "meeting_started", project=project))
         self._save_state()
 
     async def _end(self, msg: dict[str, Any]) -> None:
@@ -511,6 +512,11 @@ class MeetingSession:
                 log.warning("unreadable meeting state %s", path)
         return sorted(found, key=lambda item: item[1].get("updated_ms", 0), reverse=True)
 
+    def _knowledge_base(self, project: str) -> tuple[str, RepoConfig] | None:
+        """The name and settings of a project's KnowledgeBase repo; None for an unknown project."""
+        config = self.deps.config.projects.get(project)
+        return config.knowledge_base if config else None
+
     async def _resume(self, msg: dict[str, Any]) -> None:
         if self.meeting:
             await self._reply(msg, t(self._lang(), "meeting_already_running"))
@@ -518,15 +524,16 @@ class MeetingSession:
         directory, active = next(
             ((d, s) for d, s in self._states() if s.get("status") == "active"), (None, None)
         )
-        kb_config = self.deps.config.knowledge_bases.get(active["kb"]) if active else None
-        if directory is None or active is None or kb_config is None:
+        found = self._knowledge_base(active.get("project", "")) if active else None
+        if directory is None or active is None or found is None:
             await self._reply(msg, t("en", "nothing_to_resume"))
             return
-        kb = self.deps.make_kb(active["kb"], kb_config)
+        kb_name, kb_config = found
+        kb = self.deps.make_kb(active["project"], kb_name, kb_config)
         await kb.sync()
         m = self._open(
             meeting_id=active["id"],
-            kb_name=active["kb"],
+            project=active["project"],
             kb=kb,
             kb_config=kb_config,
             voice_channel_id=active["voice_channel_id"],
@@ -572,14 +579,15 @@ class MeetingSession:
             await self._reply(msg, t(self._lang(), "retry_publish_none"))
             return
         directory, state = candidates[0]
-        kb_config = self.deps.config.knowledge_bases.get(state.get("kb", ""))
-        if kb_config is None:
+        found = self._knowledge_base(state.get("project", ""))
+        if found is None:
             await self._reply(msg, t(self._lang(), "retry_publish_none"))
             return
+        kb_name, kb_config = found
         publisher = self.deps.make_publisher(kb_config)
         # The kept files were built on the KB of the meeting day: index rows are rebuilt on
         # today's base, and a decision number taken since is not published.
-        kb = self.deps.make_kb(state["kb"], kb_config)
+        kb = self.deps.make_kb(state["project"], kb_name, kb_config)
         await kb.sync()
         decisions_dir = kb.conventions.decisions.dir.rstrip("/") + "/"
         taken = existing_numbers(
@@ -634,9 +642,9 @@ class MeetingSession:
         self,
         *,
         meeting_id: str,
-        kb_name: str,
+        project: str,
         kb: SyncableKnowledgeBase,
-        kb_config: KbConfig,
+        kb_config: RepoConfig,
         voice_channel_id: str,
         text_channel_id: str,
         start_ms: int,
@@ -685,7 +693,7 @@ class MeetingSession:
         m = ActiveMeeting(
             id=meeting_id,
             dir=directory,
-            kb_name=kb_name,
+            project=project,
             kb=kb,
             publisher=agent.publisher,
             voice_channel_id=voice_channel_id,
@@ -709,7 +717,7 @@ class MeetingSession:
         state = {
             "status": status,
             "id": m.id,
-            "kb": m.kb_name,
+            "project": m.project,
             "voice_channel_id": m.voice_channel_id,
             "text_channel_id": m.text_channel_id,
             "start_ms": m.start_ms,

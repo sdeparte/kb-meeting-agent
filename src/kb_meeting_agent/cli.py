@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     replay = commands.add_parser("replay", help="replay a recorded transcript (JSONL)")
     replay.add_argument("transcript", type=Path)
     replay.add_argument("--config", type=Path, default=Path("config.yml"))
-    replay.add_argument("--kb", required=True, help="knowledge base name from the config")
+    replay.add_argument("--project", required=True, help="project name from the config")
     replay.add_argument("--out", type=Path, default=Path("replay-out"))
     replay.add_argument("--level", choices=["silent", "contradictions", "context"])
     replay.add_argument("--auto-validate", action="store_true", help="validate every decision")
@@ -66,16 +66,22 @@ def _run(args: argparse.Namespace) -> int:
 
 async def _replay(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    kb_config = config.knowledge_bases.get(args.kb)
-    if kb_config is None:
-        print(f"unknown knowledge base: {args.kb}", file=sys.stderr)
+    project = config.projects.get(args.project)
+    if project is None:
+        print(f"unknown project: {args.project}", file=sys.stderr)
         return 2
+    kb_name, kb_config = project.knowledge_base
     if args.publish and not kb_config.token:
-        print(f"--publish needs a token for knowledge base {args.kb}", file=sys.stderr)
+        print(f"--publish needs a token for the {kb_name} repository", file=sys.stderr)
         return 2
     embedder = build_provider(config.llm.embedding)
     kb = GitMarkdownKnowledgeBase(
-        args.kb, kb_config, config.data_dir, embedder.embed, config.llm.embedding.model
+        kb_name,
+        kb_config,
+        config.data_dir,
+        embedder.embed,
+        config.llm.embedding.model,
+        root=config.data_dir / "projects" / args.project / kb_name,
     )
     await kb.sync()
     publisher: Publisher

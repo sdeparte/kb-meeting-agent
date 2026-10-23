@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from kb_meeting_agent.config import AppConfig, KbConfig
+from kb_meeting_agent.config import AppConfig, RepoConfig
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
 from kb_meeting_agent.live.link import ConnectorLink
 from kb_meeting_agent.live.session import MeetingSession, SessionDeps
@@ -103,12 +103,17 @@ def _deps(config: AppConfig, link: ConnectorLink) -> SessionDeps:
     assert config.transcription is not None
     embedder = build_provider(config.llm.embedding)
 
-    def make_kb(name: str, kb_config: KbConfig) -> GitMarkdownKnowledgeBase:
+    def make_kb(project: str, name: str, kb_config: RepoConfig) -> GitMarkdownKnowledgeBase:
         return GitMarkdownKnowledgeBase(
-            name, kb_config, config.data_dir, embedder.embed, config.llm.embedding.model
+            name,
+            kb_config,
+            config.data_dir,
+            embedder.embed,
+            config.llm.embedding.model,
+            root=config.data_dir / "projects" / project / name,
         )
 
-    def make_publisher(kb_config: KbConfig) -> Publisher:
+    def make_publisher(kb_config: RepoConfig) -> Publisher:
         if kb_config.token:
             return GitHubPublisher(kb_config.repo, kb_config.base_branch, kb_config.token)
         return DryRunPublisher(config.data_dir / "dry-run", local_urls=False)

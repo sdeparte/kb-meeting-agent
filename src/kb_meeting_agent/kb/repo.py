@@ -10,7 +10,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
 
-from kb_meeting_agent.config import KbConfig
+from kb_meeting_agent.config import RepoConfig
 from kb_meeting_agent.conventions import KbConventions, load_conventions, load_template
 from kb_meeting_agent.kb.chunker import chunk_markdown
 from kb_meeting_agent.kb.index import Embedder, SearchIndex
@@ -30,15 +30,17 @@ class GitMarkdownKnowledgeBase:
     def __init__(
         self,
         name: str,
-        config: KbConfig,
+        config: RepoConfig,
         data_dir: Path,
         embed: Embedder,
         embedding_model: str,
+        root: Path | None = None,  # where the clone and index live; data_dir/kb/<name> if None
     ) -> None:
         self.name = name
         self._config = config
-        self.repo_dir = data_dir / "kb" / name / "repo"
-        self._index = SearchIndex(data_dir / "kb" / name / "index.sqlite", embed)
+        root = root or data_dir / "kb" / name
+        self.repo_dir = root / "repo"
+        self._index = SearchIndex(root / "index.sqlite", embed)
         self._embedding_model = embedding_model
         self._conventions = self._with_language(KbConventions())
 

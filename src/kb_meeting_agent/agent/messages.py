@@ -47,10 +47,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "it is deleted. The minutes and the validated decisions will be proposed as pull "
             "requests in {repo}. Use /meeting optout to stop transcribing your voice."
         ),
-        "meeting_started": "Meeting started with the {kb} knowledge base.",
+        "meeting_started": "Meeting started with the {project} project.",
         "meeting_already_running": "A meeting is already running.",
         "join_voice_first": "Join a voice channel first.",
-        "unknown_kb": "Unknown knowledge base. Available: {names}.",
+        "unknown_project": "Unknown project. Available: {names}.",
         "no_meeting": "No meeting is running.",
         "meeting_ending": "Ending the meeting: writing the minutes…",
         "meeting_already_ending": "The meeting is already ending.",
@@ -177,10 +177,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "seront proposés en pull request dans {repo}. Utilisez /meeting optout pour ne plus "
             "être transcrit."
         ),
-        "meeting_started": "Réunion démarrée avec la base de connaissances {kb}.",
+        "meeting_started": "Réunion démarrée avec le projet {project}.",
         "meeting_already_running": "Une réunion est déjà en cours.",
         "join_voice_first": "Rejoignez d'abord un salon vocal.",
-        "unknown_kb": "Base de connaissances inconnue. Disponibles : {names}.",
+        "unknown_project": "Projet inconnu. Disponibles : {names}.",
         "no_meeting": "Aucune réunion en cours.",
         "meeting_ending": "Clôture de la réunion : rédaction du compte rendu…",
         "meeting_already_ending": "La réunion est déjà en cours de clôture.",
