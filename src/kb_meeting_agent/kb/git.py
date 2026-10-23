@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 
 from kb_meeting_agent.config import RepoConfig
+from kb_meeting_agent.forges import forge_for
 
 
 class KbSyncError(Exception):
@@ -29,25 +30,27 @@ class GitCheckout:
 
     def __init__(self, config: RepoConfig, repo_dir: Path) -> None:
         self._config = config
+        self._forge = forge_for(config)
         self.repo_dir = repo_dir
 
     def _clone_url(self) -> str:
-        return self._config.clone_url or f"https://github.com/{self._config.repo}.git"
+        return self._config.clone_url or self._forge.clone_url(self._config.repo)
 
     def _basic_credential(self) -> str | None:
         if not self._config.token:
             return None
-        return base64.b64encode(f"x-access-token:{self._config.token}".encode()).decode()
+        credential = f"{self._forge.token_username}:{self._config.token}"
+        return base64.b64encode(credential.encode()).decode()
 
     def _git_env(self) -> dict[str, str]:
         """Auth through the environment: never written to .git/config, never in argv, and
-        scoped to github.com so a custom clone_url host never receives the token."""
+        scoped to the forge's host so a custom clone_url host never receives the token."""
         env = dict(os.environ)
         credential = self._basic_credential()
         if credential:
             env |= {
                 "GIT_CONFIG_COUNT": "1",
-                "GIT_CONFIG_KEY_0": "http.https://github.com/.extraHeader",
+                "GIT_CONFIG_KEY_0": f"http.{self._forge.origin}/.extraHeader",
                 "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credential}",
             }
         return env

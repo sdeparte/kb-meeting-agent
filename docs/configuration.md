@@ -70,11 +70,12 @@ A repository is `KnowledgeBase` or `CodeBase`, never both. The configuration is 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `repo` | (required) | GitHub repository, `owner/name` |
+| `provider` | `github` | where the repository is hosted. Only `github` for now; a host is added in `forges.py` (clone URL, git auth, file links) plus a publisher in `publish/` |
+| `repo` | (required) | repository on that host, `owner/name` |
 | `tags` | (required) | see above |
 | `base_branch` | `main` | branch the agent reads (and, for the KB, opens pull requests against) |
 | `token` | none | GitHub token. KB: required for `--publish` and for a private KB, with Contents and Pull requests read and write. Code repository: Contents read only, for a private repository. |
-| `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to `https://github.com/` URLs. |
+| `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to the host of `provider` (`https://github.com/`). |
 | `language` | `en` | `KnowledgeBase` only: language of the agent's messages, pull requests and generated documents when the KB's `.meeting-agent.yml` does not set `language` (the KB's own setting wins) |
 | `include` | all files | `CodeBase` only: glob patterns; when set, only matching files are indexed (`src/**`) |
 | `exclude` | none | `CodeBase` only: glob patterns of files not to index, on top of the defaults below |

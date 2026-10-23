@@ -602,6 +602,7 @@ class MeetingSession:
             await self._republish_kept(msg, directory, kb, publisher)
         finally:
             kb.close()
+            await publisher.aclose()
 
     async def _republish_kept(
         self, msg: dict[str, Any], directory: Path, kb: ProjectSources, publisher: Publisher
@@ -778,6 +779,10 @@ class MeetingSession:
                 m.code_sync.cancel()
                 await asyncio.gather(m.code_sync, return_exceptions=True)
             m.kb.close()
+            try:
+                await m.publisher.aclose()
+            except Exception:
+                log.exception("closing the publisher failed")
             try:
                 self._save_state(status=status)
             except Exception:

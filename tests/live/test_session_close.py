@@ -35,6 +35,7 @@ async def test_close_publishes_minutes_leaves_and_deletes_audio(make_session):
     state = json.loads((meeting.dir / "state.json").read_text(encoding="utf-8"))
     assert state["status"] == "closed"
     assert session.meeting is None
+    assert publisher.closed
 
 
 async def test_second_pass_feeds_the_minutes(make_session):
@@ -106,6 +107,7 @@ async def test_retry_publish_sends_kept_pull_requests(make_session):
     assert any(path.endswith("-weekly.md") for path in files)
     assert "https://example.test/pull/1" in link2.of("reply")[-1]["text"]
     assert not any((meeting_dir / "unpublished").rglob("PR.md"))
+    assert publisher.closed
 
 
 async def test_optout_survives_a_resume_and_deletes_the_speakers_audio(make_session):

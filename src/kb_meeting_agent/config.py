@@ -71,6 +71,7 @@ Tag = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]+$")]
 
 
 class RepoConfig(_Strict):
+    provider: Literal["github"] = "github"  # where the repo is hosted (forges.py)
     repo: str
     base_branch: str = "main"
     token: str | None = None

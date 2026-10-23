@@ -16,7 +16,7 @@ from kb_meeting_agent.live.link import ConnectorLink
 from kb_meeting_agent.live.session import MeetingSession, SessionDeps
 from kb_meeting_agent.llm.factory import build_provider
 from kb_meeting_agent.ports import Publisher
-from kb_meeting_agent.publish.github import GitHubPublisher
+from kb_meeting_agent.publish.factory import build_publisher
 from kb_meeting_agent.publish.local import DryRunPublisher
 from kb_meeting_agent.transcription.factory import build_transcriber
 
@@ -110,7 +110,7 @@ def _deps(config: AppConfig, link: ConnectorLink) -> SessionDeps:
 
     def make_publisher(kb_config: RepoConfig) -> Publisher:
         if kb_config.token:
-            return GitHubPublisher(kb_config.repo, kb_config.base_branch, kb_config.token)
+            return build_publisher(kb_config)
         return DryRunPublisher(config.data_dir / "dry-run", local_urls=False)
 
     final = config.transcription.final

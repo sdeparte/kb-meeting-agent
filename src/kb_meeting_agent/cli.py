@@ -12,7 +12,7 @@ from kb_meeting_agent.config import load_config
 from kb_meeting_agent.kb.project import build_sources
 from kb_meeting_agent.llm.factory import build_provider
 from kb_meeting_agent.ports import OutMessage, Publisher
-from kb_meeting_agent.publish.github import GitHubPublisher
+from kb_meeting_agent.publish.factory import build_publisher
 from kb_meeting_agent.publish.local import DryRunPublisher, LocalKeeper
 
 
@@ -116,7 +116,7 @@ async def _replay(args: argparse.Namespace) -> int:
             print(f"{repo.name}: {exc} (answers rely on the other sources)", file=sys.stderr)
     publisher: Publisher
     if args.publish:
-        publisher = GitHubPublisher(kb_config.repo, kb_config.base_branch, kb_config.token)
+        publisher = build_publisher(kb_config)
     else:
         publisher = DryRunPublisher(args.out)
     transcript_path = args.out / "transcript.jsonl"
@@ -154,6 +154,5 @@ async def _replay(args: argparse.Namespace) -> int:
         await agent.end()
     finally:
         kb.close()
-        if isinstance(publisher, GitHubPublisher):
-            await publisher.aclose()
+        await publisher.aclose()
     return 0
