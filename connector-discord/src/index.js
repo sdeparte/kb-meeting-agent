@@ -1,4 +1,5 @@
-// kb-meeting-agent Discord connector: translates Discord <-> protocol v2. No business logic.
+// kb-meeting-agent Discord connector: translates Discord <-> the core protocol. No business logic:
+// commands come from the core's catalog, and chat lines starting with ! go to the core as typed.
 import opus from "@discordjs/opus";
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import {
@@ -14,7 +15,8 @@ import {
   TextInputStyle,
 } from "discord.js";
 
-import { COMMANDS, commandName, commandOptions } from "./commands.js";
+import { isCommandForCore } from "./chat.js";
+import { commandName, commandOptions, toDiscordCommands } from "./commands.js";
 import { downsample48kStereoTo16kMono } from "./downsample.js";
 import { CONFIG_ERROR_EXIT, PROTOCOL_VERSION, encodeAudioFrame, message, parseMessage } from "./protocol.js";
 import { isLoggableVoiceDebug, truncate } from "./text.js";
@@ -29,7 +31,17 @@ if (missing.length) {
   process.exit(CONFIG_ERROR_EXIT);
 }
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+// GuildMessages and MessageContent: to read the "!" commands typed in the chat.
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
+let guild = null;
+let catalog = []; // the core's commands, from its `commands` message
 let core = null; // opened once logged in to Discord, so a join is never handled too early
 const interactions = new Map(); // interaction id -> deferred interaction awaiting a reply
 const modals = new Map(); // button custom id -> modal descriptor
@@ -197,7 +209,11 @@ function components(buttons = []) {
 }
 
 async function handleCore(msg) {
-  if (msg.type === "join") {
+  if (msg.type === "commands") {
+    catalog = msg.commands ?? [];
+    await guild.commands.set(toDiscordCommands(catalog));
+    log(`commands registered on ${guild.name}`);
+  } else if (msg.type === "join") {
     await joinVoice(msg.voice_channel_id, msg.text_channel_id);
   } else if (msg.type === "leave") {
     wanted = null;
@@ -245,6 +261,7 @@ function userOf(interaction) {
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.guildId !== DISCORD_GUILD_ID) return; // commands are registered there only
   try {
     if (interaction.isChatInputCommand()) {
       const name = commandName(interaction);
@@ -253,7 +270,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       send("command", {
         interaction_id: interaction.id,
         name,
-        options: commandOptions(interaction),
+        options: commandOptions(interaction, catalog),
         user: userOf(interaction),
         text_channel_id: interaction.channelId,
         voice_channel_id: interaction.member?.voice?.channelId ?? null,
@@ -293,13 +310,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
+client.on(Events.MessageCreate, (message) => {
+  const meetingTextChannelId = voice?.textChannelId ?? wanted?.textChannelId ?? null;
+  if (!isCommandForCore(message, { guildId: DISCORD_GUILD_ID, meetingTextChannelId })) return;
+  send("chat", {
+    text: message.content.trim(),
+    user: { id: message.author.id, name: message.member?.displayName ?? message.author.username },
+    text_channel_id: message.channelId,
+    voice_channel_id: message.member?.voice?.channelId ?? null,
+  });
+});
+
 client.on(Events.VoiceStateUpdate, (before, after) => {
   if (voice && (before.channelId === voice.channel.id || after.channelId === voice.channel.id)) reportMembers();
 });
 
 function connectCore() {
   core = new WebSocket(KBMA_CORE_URL);
-  core.addEventListener("open", () => send("hello", { secret: KBMA_SECRET, protocol: PROTOCOL_VERSION, connector: "discord/0.1.0" }));
+  core.addEventListener("open", () => send("hello", {
+      secret: KBMA_SECRET,
+      protocol: PROTOCOL_VERSION,
+      connector: "discord/0.2.0",
+      capabilities: { buttons: true },
+    }));
   core.addEventListener("message", onCoreMessage);
   core.addEventListener("close", () => {
     log("core connection closed; exiting so the core restarts the connector");
@@ -309,9 +342,8 @@ function connectCore() {
 }
 
 client.once(Events.ClientReady, async () => {
-  const guild = await client.guilds.fetch(DISCORD_GUILD_ID);
-  await guild.commands.set(COMMANDS);
-  log(`ready as ${client.user.tag}; commands registered on ${guild.name}`);
+  guild = await client.guilds.fetch(DISCORD_GUILD_ID);
+  log(`ready as ${client.user.tag} on ${guild.name}; waiting for the core's commands`);
   connectCore();
 });
 

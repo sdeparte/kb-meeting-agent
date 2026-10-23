@@ -1,49 +1,43 @@
-const STRING = 3;
+// Discord slash commands built from the core's command catalog (the `commands` message).
 const SUBCOMMAND = 1;
-const LEVELS = ["silent", "contradictions", "context"].map((value) => ({ name: value, value }));
+const STRING = 3;
+const GROUP_DESCRIPTIONS = { meeting: "Meeting agent" };
 
-export const COMMANDS = [
-  {
-    name: "meeting",
-    description: "Meeting agent",
-    options: [
-      {
-        type: SUBCOMMAND,
-        name: "start",
-        description: "Transcribe your voice channel",
-        options: [
-          { type: STRING, name: "project", description: "Project name", required: true },
-          { type: STRING, name: "level", description: "How often the agent speaks up", required: false, choices: LEVELS },
-        ],
-      },
-      { type: SUBCOMMAND, name: "end", description: "End the meeting and publish the minutes" },
-      {
-        type: SUBCOMMAND,
-        name: "level",
-        description: "Change how often the agent speaks up",
-        options: [{ type: STRING, name: "level", description: "Level", required: true, choices: LEVELS }],
-      },
-      { type: SUBCOMMAND, name: "optout", description: "Stop transcribing your voice" },
-      { type: SUBCOMMAND, name: "resume", description: "Resume the last unfinished meeting" },
-      { type: SUBCOMMAND, name: "retry-publish", description: "Publish pull requests kept after a failure" },
-    ],
-  },
-  {
-    name: "ask",
-    description: "Ask the agent about the project",
-    options: [{ type: STRING, name: "question", description: "Your question", required: true }],
-  },
-];
+function toOption(option) {
+  return {
+    type: STRING,
+    name: option.name,
+    description: option.description.slice(0, 100),
+    required: option.required,
+    ...(option.choices.length ? { choices: option.choices.map((value) => ({ name: value, value })) } : {}),
+  };
+}
+
+export function toDiscordCommands(catalog) {
+  const commands = new Map();
+  for (const entry of catalog) {
+    const [top, sub] = entry.slash;
+    if (sub === undefined) {
+      commands.set(top, { name: top, description: entry.description.slice(0, 100), options: entry.options.map(toOption) });
+      continue;
+    }
+    if (!commands.has(top)) commands.set(top, { name: top, description: GROUP_DESCRIPTIONS[top] ?? top, options: [] });
+    commands.get(top).options.push({
+      type: SUBCOMMAND,
+      name: sub,
+      description: entry.description.slice(0, 100),
+      options: entry.options.map(toOption),
+    });
+  }
+  return [...commands.values()];
+}
 
 export function commandName(interaction) {
   const sub = interaction.options.getSubcommand(false);
   return sub ? `${interaction.commandName}_${sub.replaceAll("-", "_")}` : interaction.commandName;
 }
 
-export function commandOptions(interaction) {
-  return {
-    project: interaction.options.getString("project"),
-    level: interaction.options.getString("level"),
-    question: interaction.options.getString("question"),
-  };
+export function commandOptions(interaction, catalog) {
+  const entry = catalog.find((c) => c.id === commandName(interaction));
+  return Object.fromEntries((entry?.options ?? []).map((o) => [o.name, interaction.options.getString(o.name)]));
 }
