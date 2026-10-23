@@ -1,8 +1,12 @@
 import json
 
-from conftest import minutes_content
+import pytest
+from conftest import KB_FILES, make_kb_repo, minutes_content
 
+from kb_meeting_agent.live.audio import BYTES_PER_MS
+from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.fake import FakeProvider
+from kb_meeting_agent.ports import OutMessage
 from live.helpers import chat, command, speak
 
 DECISION = {"statement": "Cooldown is 30 seconds", "quote": "bonjour à tous"}
@@ -196,6 +200,68 @@ async def test_chat_command_during_close_is_refused(make_session):
     assert link.texts()[-1] == "The meeting is already ending."
 
 
+@pytest.fixture
+def french_kb(tmp_path):
+    settings = KB_FILES[".meeting-agent.yml"].replace("language: en", "language: fr")
+    return str(make_kb_repo(tmp_path / "kb-fr", {**KB_FILES, ".meeting-agent.yml": settings}))
+
+
+async def test_project_switch_before_anything_rebuilds_the_sources(make_session, french_kb):
+    session, link, clock, publisher = make_session(second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    await speak(session)
+    await session.settle()
+    meeting = session.meeting
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting.project == "other" and session.meeting.id == meeting.id
+    assert [s.text for s in session.meeting.agent.transcript.all()] == ["bonjour à tous"]
+    assert publisher.closed
+    state = json.loads((meeting.dir / "state.json").read_text(encoding="utf-8"))
+    assert state["project"] == "other"
+
+
+async def test_switch_to_a_kb_in_another_language(make_session, french_kb):
+    session, link, *_ = make_session(second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    await session.on_event("message", chat("!projet other"))
+    assert "Cette réunion est transcrite" in link.texts()[-2]
+    assert link.texts()[-1] == "Projet changé : other."
+
+
+async def test_project_switch_after_a_decision_is_refused(make_session, french_kb):
+    session, link, *_ = make_session(fast=deciding(), second_kb=french_kb)
+    await propose(session)
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting.project == "test"
+    assert link.texts()[-1] == (
+        "The project can no longer change: the agent has already spoken. Project: test."
+    )
+
+
+async def test_system_messages_do_not_lock_the_project(make_session, french_kb):
+    session, link, *_ = make_session(second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    await session.meeting.sink.send(OutMessage("Building the index of back…"))
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting.project == "other"
+
+
+async def test_switch_to_an_unknown_project(make_session):
+    session, link, *_ = make_session()
+    await session.on_event("message", chat("!start"))
+    await session.on_event("message", chat("!project nope"))
+    assert link.texts()[-1] == "Unknown project. Available: test."
+
+
+async def test_resume_after_a_switch_uses_the_new_project(make_session, french_kb):
+    first, *_ = make_session(second_kb=french_kb)
+    await first.on_event("message", chat("!start"))
+    await first.on_event("message", chat("!project other"))
+    second, *_ = make_session(second_kb=french_kb)
+    await second.on_event("message", chat("!resume"))
+    assert second.meeting.project == "other"
+
+
 async def test_start_does_not_resume_a_meeting_from_another_day(make_session):
     first, *_ = make_session()
     await first.on_event("message", chat("!start"))
@@ -207,6 +273,63 @@ async def test_start_does_not_resume_a_meeting_from_another_day(make_session):
     second, *_ = make_session()
     await second.on_event("message", chat("!start"))
     assert second.meeting.id != old.id
+
+
+async def test_speech_in_progress_survives_a_project_switch(make_session, french_kb):
+    session, link, *_ = make_session(second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    await session.on_event(
+        "message", {"type": "utterance_start", "user_id": "u1", "speaker_name": "Alice", "t": 1_000}
+    )
+    await session.on_event("audio", AudioFrame("u1", 1_000, bytes(BYTES_PER_MS * 500)))
+    await session.on_event("message", chat("!project other"))
+    await session.on_event("audio", AudioFrame("u1", 1_500, bytes(BYTES_PER_MS * 500)))
+    await session.on_event("message", {"type": "utterance_end", "user_id": "u1", "t": 2_000})
+    await session.settle()
+    records = (session.meeting.dir / "utterances.jsonl").read_text(encoding="utf-8")
+    spans = [json.loads(line) for line in records.splitlines()]
+    assert sum(r["end_ms"] - r["start_ms"] for r in spans) == 1_000
+
+
+async def test_a_publisher_failing_to_close_does_not_stop_the_switch(make_session, french_kb):
+    session, link, clock, publisher = make_session(second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+
+    async def broken():
+        raise RuntimeError("network down")
+
+    publisher.aclose = broken
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting.project == "other"
+    assert link.texts()[-1] == "Projet changé : other."
+
+
+async def test_a_meeting_closed_during_the_switch_stays_closed(make_session, french_kb):
+    session, link, *_ = make_session(strong=FakeProvider(dict(MINUTES)), second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    sync = session._sync_or_close
+
+    async def closed_meanwhile(sources):
+        await sync(sources)
+        await session.close()  # the auto-leave timer firing during the sync
+
+    session._sync_or_close = closed_meanwhile
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting is None
+
+
+@pytest.mark.parametrize(
+    "line", ["!project other", "!fin", "!level silent", "!validate d1", "!edit d1 Autre"]
+)
+async def test_meeting_commands_from_outside_the_meeting_are_refused(make_session, french_kb, line):
+    session, link, clock, publisher = make_session(fast=deciding(), second_kb=french_kb)
+    await propose(session)
+    await session.on_event("message", chat(line, voice="v9", text_channel="t9"))
+    await session.settle()
+    assert link.texts()[-1] == (
+        "Only the meeting's participants can do that: join its call or use its text channel."
+    )
+    assert session.meeting.project == "test" and publisher.prs == []
 
 
 async def test_meeting_commands_from_its_text_channel_are_accepted(make_session):
@@ -225,3 +348,22 @@ async def test_slash_commands_from_outside_the_meeting_are_refused_too(make_sess
     await session.on_event("message", msg)
     assert session.meeting is not None
     assert link.of("reply")[-1]["text"].startswith("Only the meeting's participants")
+
+
+async def test_a_decision_proposed_while_switching_cancels_the_switch(make_session, french_kb):
+    session, link, *_ = make_session(fast=deciding(), second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    await speak(session, start=0, ms=31_000)  # still being transcribed: no settle
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting.project == "test"
+    assert link.texts()[-1].startswith("The project can no longer change")
+    await session.settle()
+
+
+async def test_start_naming_another_project_does_not_resume(make_session, french_kb):
+    first, *_ = make_session(second_kb=french_kb)
+    await first.on_event("message", chat("!start"))
+    old = first.meeting
+    second, *_ = make_session(second_kb=french_kb)
+    await second.on_event("message", chat("!start other"))
+    assert second.meeting.id != old.id and second.meeting.project == "other"

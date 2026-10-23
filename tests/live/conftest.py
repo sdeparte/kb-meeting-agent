@@ -21,6 +21,7 @@ def make_session(tmp_path, kb_origin):
         agent=None,
         transcription=None,
         code=None,  # clone URL of a `back` CodeBase repository added to the project
+        second_kb=None,  # clone URL of the KB of a second project, `other`
         **defaults,
     ):
         repos = {"kb": {"repo": "acme/kb", "clone_url": str(kb_origin), "tags": ["KnowledgeBase"]}}
@@ -38,8 +39,29 @@ def make_session(tmp_path, kb_origin):
                     role: {"provider": "fake", "model": "fake"}
                     for role in ("fast", "strong", "embedding")
                 },
-                "projects": {"test": {"repos": repos}},
-                "defaults": {"auto_leave_empty_minutes": 0.001, **defaults},
+                "projects": {
+                    "test": {"repos": repos},
+                    **(
+                        {
+                            "other": {
+                                "repos": {
+                                    "kb2": {
+                                        "repo": "acme/kb2",
+                                        "clone_url": second_kb,
+                                        "tags": ["KnowledgeBase"],
+                                    }
+                                }
+                            }
+                        }
+                        if second_kb
+                        else {}
+                    ),
+                },
+                "defaults": {
+                    "auto_leave_empty_minutes": 0.001,
+                    **({"project": "test"} if second_kb else {}),
+                    **defaults,
+                },
                 "transcription": {
                     "live": {"provider": "fake", "model": "fake"},
                     "min_utterance_seconds": 0,

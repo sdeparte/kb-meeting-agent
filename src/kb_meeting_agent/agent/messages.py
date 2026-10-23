@@ -3,6 +3,10 @@ from __future__ import annotations
 _MESSAGES: dict[str, dict[str, str]] = {
     "en": {
         "help_header": "Commands (type them in the chat):",
+        "project_changed": "Project changed: {project}.",
+        "project_locked": (
+            "The project can no longer change: the agent has already spoken. Project: {project}."
+        ),
         "decision_reply_hint": "Reply {commands}.",
         "option_project": "project",
         "option_level": "level",
@@ -68,8 +72,8 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "This meeting is transcribed by {name}, an AI agent. Say “{name}, …” to ask it a "
             "question. Audio stays on the agent's machine until the minutes are published, then "
             "it is deleted. The minutes and the validated decisions will be proposed as pull "
-            "requests in {repo}. Type !optout to stop transcribing your voice; !help lists the "
-            "commands."
+            "requests in {repo}. Project: {project} (!project <name> changes it until the agent "
+            "speaks). Type !optout to stop transcribing your voice; !help lists the commands."
         ),
         "meeting_started": "Meeting started with the {project} project.",
         "meeting_already_running": "A meeting is already running.",
@@ -165,6 +169,10 @@ _MESSAGES: dict[str, dict[str, str]] = {
     },
     "fr": {
         "help_header": "Commandes (à taper dans le chat) :",
+        "project_changed": "Projet changé : {project}.",
+        "project_locked": (
+            "Le projet ne peut plus changer : l'agent a déjà parlé. Projet : {project}."
+        ),
         "decision_reply_hint": "Répondez {commands}.",
         "option_project": "projet",
         "option_level": "niveau",
@@ -233,8 +241,9 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "Cette réunion est transcrite par {name}, un agent IA. Dites « {name}, … » pour lui "
             "poser une question. L'audio reste sur la machine de l'agent jusqu'à la publication "
             "du compte rendu, puis il est supprimé. Le compte rendu et les décisions validées "
-            "seront proposés en pull request dans {repo}. Tapez !optout pour ne plus être "
-            "transcrit ; !aide liste les commandes."
+            "seront proposés en pull request dans {repo}. Projet : {project} (!projet <nom> en "
+            "change tant que l'agent n'a pas parlé). Tapez !optout pour ne plus être transcrit ; "
+            "!aide liste les commandes."
         ),
         "meeting_started": "Réunion démarrée avec le projet {project}.",
         "meeting_already_running": "Une réunion est déjà en cours.",

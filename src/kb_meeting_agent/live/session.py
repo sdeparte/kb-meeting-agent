@@ -451,6 +451,7 @@ class MeetingSession:
             "meeting_retry_publish": self._retry_publish,
             "ask": self._ask,
             "help": self._help,
+            "meeting_project": self._project,
             "decision_validate": self._decide,
             "decision_ignore": self._decide,
             "decision_edit": self._decide,
@@ -476,6 +477,89 @@ class MeetingSession:
             msg.get("voice_channel_id") == m.voice_channel_id
             or msg.get("text_channel_id") == m.text_channel_id
         )
+
+    async def _post_notice(self, m: ActiveMeeting, kb_config: RepoConfig) -> None:
+        notice = t(
+            m.lang,
+            "recording_notice",
+            repo=kb_config.repo,
+            name=self.deps.config.agent.name,
+            project=m.project,
+        )
+        await m.sink.send(OutMessage(notice))
+
+    async def _project(self, msg: dict[str, Any]) -> None:
+        if (m := await self._open_meeting(msg)) is None:
+            return
+        found = self.deps.config.project_named(msg["options"].get("project"))
+        if found is None:
+            names = ", ".join(sorted(self.deps.config.projects))
+            await self._respond(msg, t(m.lang, "unknown_project", names=names))
+            return
+        name, project_config = found
+        if name == m.project:
+            await self._respond(msg, t(m.lang, "project_changed", project=name))
+        elif m.agent.acted:
+            await self._respond(msg, t(m.lang, "project_locked", project=m.project))
+        else:
+            await self._switch_project(msg, m, name, project_config)
+
+    async def _switch_project(
+        self, msg: dict[str, Any], m: ActiveMeeting, name: str, project_config: ProjectConfig
+    ) -> None:
+        """Reopen the meeting on another project: same id, folder, transcript and opt-outs;
+        new sources, publisher, agent, vocabulary hint and transcription pipeline."""
+        _, kb_config = project_config.knowledge_base
+        kb = self.deps.make_sources(name, project_config)
+        await self._sync_or_close(kb)
+        # Utterances still open stay open: the new meeting keeps the assembler, so whoever
+        # is speaking is not cut. What is already recorded is handled on the old project.
+        await m.pipeline.drain()
+        await m.queue.join()
+        # Meanwhile the meeting may have closed (the room emptied), or what was still being
+        # transcribed or queued may have made the agent speak.
+        if m.closing or self.meeting is not m:
+            kb.close()
+            return
+        if m.agent.acted:
+            kb.close()
+            await self._respond(msg, t(m.lang, "project_locked", project=m.project))
+            return
+        await m.queue.put(("stop",))
+        if m.consumer:
+            await m.consumer
+        for task in (m.code_sync, m.joiner):
+            if task:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        m.kb.close()
+        try:
+            await m.publisher.aclose()
+        except Exception:
+            log.exception("closing the publisher failed")
+        new = self._open(
+            meeting_id=m.id,
+            project=name,
+            kb=kb,
+            kb_config=kb_config,
+            voice_channel_id=m.voice_channel_id,
+            text_channel_id=m.text_channel_id,
+            start_ms=m.start_ms,
+            meeting_date=m.meeting_date,
+            assembler=m.assembler,
+        )
+        new.agent.restore(m.agent.snapshot())
+        new.opted_out |= m.opted_out
+        new.gaps, new.gap_started_ms = m.gaps, m.gap_started_ms
+        new.humans, new.empty_timer = m.humans, m.empty_timer
+        if m.voice_ready.is_set():
+            new.voice_ready.set()
+        else:
+            self._keep_joining(new)
+        await self._post_notice(new, kb_config)
+        await self._respond(msg, t(new.lang, "project_changed", project=name))
+        self._save_state()
+        new.code_sync = asyncio.create_task(self._sync_code(new))
 
     async def _help(self, msg: dict[str, Any]) -> None:
         await self._respond(msg, help_text(self._lang()))
@@ -568,10 +652,7 @@ class MeetingSession:
         if level := msg["options"].get("level"):
             await m.agent.set_level(level, announce=False, user=msg["user"]["name"])
         await self._join(m)
-        notice = t(
-            m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
-        )
-        await m.sink.send(OutMessage(notice))
+        await self._post_notice(m, kb_config)
         await self._respond(msg, t(m.lang, "meeting_started", project=project))
         self._save_state()
         m.code_sync = asyncio.create_task(self._sync_code(m))
@@ -697,10 +778,7 @@ class MeetingSession:
         ]
         await self._join(m)
         await self._send_optouts(m)
-        notice = t(  # people may have joined since
-            m.lang, "recording_notice", repo=kb_config.repo, name=self.deps.config.agent.name
-        )
-        await m.sink.send(OutMessage(notice))
+        await self._post_notice(m, kb_config)  # people may have joined since
         await self._respond(msg, t(m.lang, "meeting_resumed"))
         self._save_state()
         m.code_sync = asyncio.create_task(self._sync_code(m))
@@ -804,6 +882,7 @@ class MeetingSession:
         start_ms: int,
         meeting_date: date,
         next_utterance: int = 0,
+        assembler: UtteranceAssembler | None = None,
     ) -> ActiveMeeting:
         directory = self._meetings_dir / meeting_id
         (directory / "audio").mkdir(parents=True, exist_ok=True)
@@ -860,7 +939,7 @@ class MeetingSession:
             prompt=prompt,
             agent=agent,
             sink=sink,
-            assembler=UtteranceAssembler(directory / "audio", next_utterance),
+            assembler=assembler or UtteranceAssembler(directory / "audio", next_utterance),
             pipeline=pipeline,
         )
         m.consumer = asyncio.create_task(self._consume(m))
