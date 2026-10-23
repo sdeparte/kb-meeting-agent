@@ -11,7 +11,7 @@ from live.helpers import FakeLink, command, speak
 
 
 async def start(session, **options):
-    await session.on_event("message", command("meeting_start", kb="test", **options))
+    await session.on_event("message", command("meeting_start", project="test", **options))
 
 
 async def test_start_joins_posts_the_notice_and_replies(make_session):
@@ -19,24 +19,24 @@ async def test_start_joins_posts_the_notice_and_replies(make_session):
     await start(session)
     assert link.of("join") == [{"voice_channel_id": "v1", "text_channel_id": "t1"}]
     assert "acme/kb" in link.texts()[0] and "/meeting optout" in link.texts()[0]
-    assert link.of("reply")[-1]["text"] == "Meeting started with the test knowledge base."
+    assert link.of("reply")[-1]["text"] == "Meeting started with the test project."
     state = json.loads((session.meeting.dir / "state.json").read_text(encoding="utf-8"))
-    assert state["status"] == "active" and state["kb"] == "test"
+    assert state["status"] == "active" and state["project"] == "test"
 
 
-async def test_start_requires_a_voice_channel_and_a_known_kb(make_session):
+async def test_start_requires_a_voice_channel_and_a_known_project(make_session):
     session, link, *_ = make_session()
-    await session.on_event("message", command("meeting_start", voice=None, kb="test"))
-    await session.on_event("message", command("meeting_start", interaction="i2", kb="nope"))
+    await session.on_event("message", command("meeting_start", voice=None, project="test"))
+    await session.on_event("message", command("meeting_start", interaction="i2", project="nope"))
     replies = [r["text"] for r in link.of("reply")]
-    assert replies == ["Join a voice channel first.", "Unknown knowledge base. Available: test."]
+    assert replies == ["Join a voice channel first.", "Unknown project. Available: test."]
     assert session.meeting is None
 
 
 async def test_second_start_is_refused(make_session):
     session, link, *_ = make_session()
     await start(session)
-    await session.on_event("message", command("meeting_start", interaction="i2", kb="test"))
+    await session.on_event("message", command("meeting_start", interaction="i2", project="test"))
     assert link.of("reply")[-1]["text"] == "A meeting is already running."
 
 

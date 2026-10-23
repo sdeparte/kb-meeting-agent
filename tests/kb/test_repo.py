@@ -1,6 +1,6 @@
 from conftest import KB_FILES, commit_file, make_kb_repo
 
-from kb_meeting_agent.config import KbConfig
+from kb_meeting_agent.config import RepoConfig
 from kb_meeting_agent.kb import repo
 from kb_meeting_agent.kb.repo import GitMarkdownKnowledgeBase
 from kb_meeting_agent.llm.fake import FakeProvider
@@ -38,7 +38,7 @@ async def test_resync_is_incremental(kb, kb_origin):
 
 
 async def test_changing_embedding_model_rebuilds_the_index(tmp_path, kb_origin):
-    config = KbConfig(repo="acme/kb", clone_url=str(kb_origin))
+    config = RepoConfig(repo="acme/kb", clone_url=str(kb_origin), tags=["KnowledgeBase"])
     first = GitMarkdownKnowledgeBase("t", config, tmp_path / "d", FakeProvider().embed, "m1")
     await first.sync()
     first._index.set_meta("probe", "x")
@@ -53,7 +53,9 @@ async def test_changing_embedding_model_rebuilds_the_index(tmp_path, kb_origin):
 
 async def test_language_falls_back_to_the_instance_setting(tmp_path, kb_origin):
     commit_file(kb_origin, ".meeting-agent.yml", None)
-    config = KbConfig(repo="acme/kb", clone_url=str(kb_origin), language="fr")
+    config = RepoConfig(
+        repo="acme/kb", clone_url=str(kb_origin), tags=["KnowledgeBase"], language="fr"
+    )
     knowledge_base = GitMarkdownKnowledgeBase(
         "t", config, tmp_path / "d", FakeProvider().embed, "m"
     )
@@ -67,7 +69,7 @@ async def test_language_falls_back_to_the_instance_setting(tmp_path, kb_origin):
 
 
 def test_token_is_scoped_to_github_and_kept_out_of_argv(tmp_path):
-    config = KbConfig(repo="acme/kb", token="s3cret")
+    config = RepoConfig(repo="acme/kb", token="s3cret", tags=["KnowledgeBase"])
     knowledge_base = GitMarkdownKnowledgeBase(
         "t", config, tmp_path / "d", FakeProvider().embed, "m"
     )
@@ -86,12 +88,20 @@ async def test_sync_follows_a_changed_clone_url(tmp_path, kb_origin):
     other = make_kb_repo(tmp_path / "other", KB_FILES | {"game/ideas.md": "# Ideas\n\nZeppelin.\n"})
     embed = FakeProvider().embed
     first = GitMarkdownKnowledgeBase(
-        "t", KbConfig(repo="a/b", clone_url=str(kb_origin)), tmp_path / "d", embed, "m"
+        "t",
+        RepoConfig(repo="a/b", clone_url=str(kb_origin), tags=["KnowledgeBase"]),
+        tmp_path / "d",
+        embed,
+        "m",
     )
     await first.sync()
     first.close()
     second = GitMarkdownKnowledgeBase(
-        "t", KbConfig(repo="a/b", clone_url=str(other)), tmp_path / "d", embed, "m"
+        "t",
+        RepoConfig(repo="a/b", clone_url=str(other), tags=["KnowledgeBase"]),
+        tmp_path / "d",
+        embed,
+        "m",
     )
     await second.sync()
     assert (await second.search("Zeppelin", k=1))[0].path == "game/ideas.md"

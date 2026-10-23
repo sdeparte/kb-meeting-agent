@@ -14,8 +14,10 @@ llm:
   fast: {{provider: fake, model: fake}}
   strong: {{provider: fake, model: fake}}
   embedding: {{provider: fake, model: fake}}
-knowledge_bases:
-  test: {{repo: acme/kb, clone_url: "{kb_origin}"}}
+projects:
+  test:
+    repos:
+      kb: {{repo: acme/kb, clone_url: "{kb_origin}", tags: [KnowledgeBase]}}
 """,
         encoding="utf-8",
     )
@@ -37,7 +39,7 @@ knowledge_bases:
     )
     out = tmp_path / "out"
     code = main(
-        ["replay", str(transcript), "--config", str(config), "--kb", "test", "--out", str(out)]
+        ["replay", str(transcript), "--config", str(config), "--project", "test", "--out", str(out)]
     )
     assert code == 0
     written = [p.relative_to(out).as_posix() for p in out.rglob("*.md")]
@@ -47,7 +49,7 @@ knowledge_bases:
     assert "Meeting minutes:" in capsys.readouterr().out
 
 
-def test_unknown_kb_is_an_error(tmp_path, kb_origin, capsys):
+def test_unknown_project_is_an_error(tmp_path, kb_origin, capsys):
     config = tmp_path / "config.yml"
     config.write_text(
         """
@@ -55,14 +57,14 @@ llm:
   fast: {provider: fake, model: fake}
   strong: {provider: fake, model: fake}
   embedding: {provider: fake, model: fake}
-knowledge_bases: {}
+projects: {}
 """,
         encoding="utf-8",
     )
     transcript = tmp_path / "in.jsonl"
     transcript.write_text("", encoding="utf-8")
-    assert main(["replay", str(transcript), "--config", str(config), "--kb", "nope"]) == 2
-    assert "nope" in capsys.readouterr().err
+    assert main(["replay", str(transcript), "--config", str(config), "--project", "nope"]) == 2
+    assert "unknown project: nope" in capsys.readouterr().err
 
 
 def test_run_needs_discord_and_transcription(tmp_path, capsys):
@@ -73,7 +75,7 @@ llm:
   fast: {provider: fake, model: fake}
   strong: {provider: fake, model: fake}
   embedding: {provider: fake, model: fake}
-knowledge_bases: {}
+projects: {}
 """,
         encoding="utf-8",
     )

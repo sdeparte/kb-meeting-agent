@@ -12,7 +12,7 @@ export const COMMANDS = [
         name: "start",
         description: "Transcribe your voice channel",
         options: [
-          { type: STRING, name: "kb", description: "Knowledge base name", required: true },
+          { type: STRING, name: "project", description: "Project name", required: true },
           { type: STRING, name: "level", description: "How often the agent speaks up", required: false, choices: LEVELS },
         ],
       },
@@ -30,7 +30,7 @@ export const COMMANDS = [
   },
   {
     name: "ask",
-    description: "Ask the agent about the knowledge base",
+    description: "Ask the agent about the project",
     options: [{ type: STRING, name: "question", description: "Your question", required: true }],
   },
 ];
@@ -42,7 +42,7 @@ export function commandName(interaction) {
 
 export function commandOptions(interaction) {
   return {
-    kb: interaction.options.getString("kb"),
+    project: interaction.options.getString("project"),
     level: interaction.options.getString("level"),
     question: interaction.options.getString("question"),
   };
