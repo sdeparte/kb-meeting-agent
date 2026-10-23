@@ -150,7 +150,7 @@ LISTED_SCOPE = "scope (what it applies to: exactly one of {scopes})"
 
 DRAFT_SYSTEM = """You write a decision record for a knowledge base, following the KB's own conventions below.
 Use only the decision statement, the transcript quote and the KB excerpts. Do not invent facts.
-Fields: title (short), slug (kebab-case, ASCII), {scope_field}, context, decision, consequences (Markdown allowed), related_pages (KB pages this decision probably makes outdated: the path part of an excerpt's source, the section heading, one-sentence reason), related_code (source files from the code excerpts, those with a `tags` attribute, that this decision probably requires changing: the repo and path parts of the excerpt's source, one-sentence reason; empty when there is no code excerpt).
+Fields: title (short), slug (kebab-case, ASCII), {scope_field}, context, decision, consequences (Markdown allowed), related_pages (KB pages this decision probably makes outdated: the path part of an excerpt's source, the section heading, one-sentence reason), related_code (source files from the code excerpts, those with a `tags` attribute, that this decision probably requires changing: the repo and path parts of the excerpt's source, one-sentence reason; empty when there is no code excerpt). The code repositories may be more private than the KB: never copy code into the title, context, decision or consequences, only name what it does.
 Write in language "{language}".
 
 KB CONVENTIONS:

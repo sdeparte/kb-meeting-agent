@@ -117,6 +117,7 @@ async def test_draft_decision_passes_instructions_and_excerpts(kb):
     assert "Write in English." in system
     assert "ok on passe à 30" in user and "<excerpt" in user
     assert "in the KB's vocabulary" in system
+    assert "never copy code" in system
 
 
 async def scoped_draft(kb, *answers, scopes=("client", "serveur", "les deux")):
