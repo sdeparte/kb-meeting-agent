@@ -41,6 +41,7 @@ projects:
       #   exclude: ["assets/**"]
 
 defaults:
+  # project: my-project       # required with several projects: the one a meeting starts on
   intervention_level: contradictions
   contradiction_min_confidence: 0.8
   stale_page_days: 60
