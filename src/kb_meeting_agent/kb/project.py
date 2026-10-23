@@ -154,8 +154,9 @@ def build_sources(
         GitCodeRepository(repo_name, repo, root / repo_name, embed, embedding_model)
         for repo_name, repo in project.code_repos
     ]
-    links = {
+    links = {  # GitHub only: a repository cloned from elsewhere is cited without a link
         repo_name: f"https://github.com/{repo.repo}/blob/{repo.base_branch}"
         for repo_name, repo in project.code_repos
+        if repo.clone_url is None or repo.clone_url.startswith("https://github.com/")
     }
     return ProjectSources(kb, kb_name, tuple(kb_config.tags), code, links)
