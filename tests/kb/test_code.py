@@ -1,6 +1,10 @@
 import subprocess
 
-from kb_meeting_agent.kb.code import chunk_code, select_code_files
+from conftest import commit_file
+
+from kb_meeting_agent.config import RepoConfig
+from kb_meeting_agent.kb.code import GitCodeRepository, chunk_code, select_code_files
+from kb_meeting_agent.llm.fake import FakeProvider
 
 
 def git_repo(root, files):
@@ -86,3 +90,114 @@ def test_symbolic_links_are_never_followed(tmp_path):
     (repo / "link.txt").symlink_to(outside)
     git_repo(repo, {"ok.py": "x"})
     assert select_code_files(repo, [], []) == ["ok.py"]
+
+
+def code_repo(tmp_path, origin):
+    config = RepoConfig(repo="acme/back", clone_url=str(origin), tags=["CodeBase", "BackEnd"])
+    return GitCodeRepository("back", config, tmp_path / "back", FakeProvider().embed, "fake")
+
+
+async def test_sync_indexes_code_and_search_labels_it(tmp_path, code_origin):
+    repo = code_repo(tmp_path, code_origin)
+    assert not repo.indexed
+    await repo.sync()
+    assert repo.indexed
+    [hit, *_] = await repo.search("COOLDOWN_SECONDS", k=3)
+    assert hit.anchor == "back:src/Game/Relay/RelayConfigProvider.php:1-6"
+    assert hit.citation.startswith("[BackEnd] back:")
+    assert repo.exists("lib/game/cooldown.dart") and not repo.exists(".env")
+    assert all(".env" not in c.path for c in await repo.search("SECRET", k=10))
+    repo.close()
+
+
+async def test_resync_is_incremental(tmp_path, code_origin):
+    repo = code_repo(tmp_path, code_origin)
+    await repo.sync()
+    commit_file(code_origin, "lib/game/zeppelin.dart", "const kZeppelin = 1;\n")
+    await repo.sync()
+    assert (await repo.search("kZeppelin", k=1))[0].path == "lib/game/zeppelin.dart"
+    repo.close()
+
+
+SECRET_FILES = [
+    ".envrc",
+    ".env-local",
+    "config/.env_prod",
+    "docker/prod.env",
+    "id_rsa",
+    ".ssh/id_ed25519",
+    "android/key.properties",
+    "android/app/upload.keystore",
+    "ios/cert.p12",
+    "release.jks",
+    "android/app/google-services.json",
+    "ios/Runner/GoogleService-Info.plist",
+    ".npmrc",
+    ".netrc",
+    ".pypirc",
+    "infra/prod.tfvars",
+    "infra/terraform.tfstate",
+    "infra/terraform.tfstate.backup",
+]
+
+
+def test_known_secret_files_are_never_selected(tmp_path):
+    root = git_repo(tmp_path, {**dict.fromkeys(SECRET_FILES, "x"), "src/ok.py": "x"})
+    assert select_code_files(root, [], []) == ["src/ok.py"]
+
+
+async def test_files_holding_a_secret_are_not_indexed(tmp_path):
+    origin = tmp_path / "origin"
+    files = {
+        "src/deploy.py": "KEY = '''-----BEGIN RSA PRIVATE KEY-----\nabc\n'''\n",
+        "src/ci.py": "TOKEN = 'ghp_" + "a" * 36 + "'\n",
+        "src/aws.py": "ACCESS = 'AKIA" + "A" * 16 + "'\n",
+        "src/ok.py": "COOLDOWN = 30\n",
+    }
+    from conftest import make_kb_repo
+
+    make_kb_repo(origin, files)
+    repo = code_repo(tmp_path, origin)
+    await repo.sync()
+    assert repo.exists("src/ok.py")
+    assert not any(repo.exists(path) for path in ("src/deploy.py", "src/ci.py", "src/aws.py"))
+    repo.close()
+
+
+async def test_resync_reads_only_the_changed_files(tmp_path, code_origin, monkeypatch):
+    from kb_meeting_agent.kb import code
+
+    repo = code_repo(tmp_path, code_origin)
+    await repo.sync()
+    read = []
+    original = code._read_source
+    monkeypatch.setattr(code, "_read_source", lambda path: read.append(path) or original(path))
+    commit_file(code_origin, "lib/game/cooldown.dart", "const kCooldown = 45;\n")
+    await repo.sync()
+    assert [p.name for p in read] == ["cooldown.dart"]
+    assert "45" in (await repo.search("kCooldown", k=1))[0].text
+    repo.close()
+
+
+async def test_a_stricter_secret_check_reindexes(tmp_path, code_origin, monkeypatch):
+    import re
+
+    from kb_meeting_agent.kb import code
+
+    repo = code_repo(tmp_path, code_origin)
+    await repo.sync()
+    assert repo.exists("lib/game/cooldown.dart")
+    monkeypatch.setattr(code, "SECRET_CONTENT", re.compile("kCooldown"))
+    await repo.sync()
+    assert not repo.exists("lib/game/cooldown.dart")
+    repo.close()
+
+
+async def test_two_syncs_of_the_same_checkout_do_not_collide(tmp_path, code_origin):
+    import asyncio
+
+    first, second = code_repo(tmp_path, code_origin), code_repo(tmp_path, code_origin)
+    await asyncio.gather(first.sync(), second.sync())
+    assert first.exists("lib/game/cooldown.dart")
+    first.close()
+    second.close()

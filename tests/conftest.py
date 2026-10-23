@@ -107,6 +107,20 @@ def kb_origin(tmp_path) -> Path:
     return make_kb_repo(tmp_path / "origin")
 
 
+CODE_FILES = {
+    "src/Game/Relay/RelayConfigProvider.php": (
+        "<?php\n\nfinal class RelayConfigProvider\n{\n    public const COOLDOWN_SECONDS = 30;\n}\n"
+    ),
+    "lib/game/cooldown.dart": "const kCooldown = Duration(seconds: 30);\n",
+    ".env": "SECRET=1\n",
+}
+
+
+@pytest.fixture
+def code_origin(tmp_path) -> Path:
+    return make_kb_repo(tmp_path / "code-origin", CODE_FILES)
+
+
 @pytest.fixture
 async def kb(tmp_path, kb_origin):
     config = RepoConfig(repo="acme/kb", clone_url=str(kb_origin), tags=["KnowledgeBase"])
