@@ -46,6 +46,10 @@ class GitMarkdownKnowledgeBase(GitCheckout):
     def close(self) -> None:
         self._index.close()
 
+    @property
+    def file_count(self) -> int:
+        return len(self._index.file_hashes())
+
     async def sync(self) -> None:
         await asyncio.to_thread(self._git_sync)
         self._conventions = self._with_language(load_conventions(self.repo_dir))
