@@ -1,4 +1,8 @@
-"""Connector <-> core protocol, version 1. Mirrored by connector-discord/src/protocol.js."""
+"""Connector <-> core protocol, version 2. Mirrored by connector-discord/src/protocol.js.
+
+Platform-neutral: ids (speakers, channels, interactions) are opaque strings chosen by the
+connector, such as a Discord snowflake, a Slack user id or a Meet participant name.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +11,12 @@ import struct
 from dataclasses import dataclass
 from typing import Any
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 AUDIO_FRAME = 0x01
-_HEADER = struct.Struct(">BQQ")
+# kind, timestamp, length of the speaker id; then the id (UTF-8), then the PCM
+_HEADER = struct.Struct(">BQB")
 HEADER_SIZE = _HEADER.size
+MAX_ID_BYTES = 255
 
 
 class ProtocolError(Exception):
@@ -27,16 +33,26 @@ class AudioFrame:
 
 
 def encode_audio_frame(frame: AudioFrame) -> bytes:
-    return _HEADER.pack(AUDIO_FRAME, int(frame.user_id), frame.timestamp_ms) + frame.pcm
+    user_id = frame.user_id.encode("utf-8")
+    if not 0 < len(user_id) <= MAX_ID_BYTES:
+        raise ProtocolError(f"speaker ids are 1 to {MAX_ID_BYTES} bytes")
+    return _HEADER.pack(AUDIO_FRAME, frame.timestamp_ms, len(user_id)) + user_id + frame.pcm
 
 
 def decode_audio_frame(data: bytes) -> AudioFrame:
     if len(data) < HEADER_SIZE:
         raise ProtocolError("audio frame too short")
-    kind, user_id, timestamp_ms = _HEADER.unpack_from(data)
+    kind, timestamp_ms, id_length = _HEADER.unpack_from(data)
     if kind != AUDIO_FRAME:
         raise ProtocolError(f"unknown binary frame kind {kind}")
-    return AudioFrame(str(user_id), timestamp_ms, bytes(data[HEADER_SIZE:]))
+    end = HEADER_SIZE + id_length
+    if id_length == 0 or len(data) < end:
+        raise ProtocolError("audio frame without a whole speaker id")
+    try:
+        user_id = bytes(data[HEADER_SIZE:end]).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProtocolError("speaker id is not UTF-8") from exc
+    return AudioFrame(user_id, timestamp_ms, bytes(data[end:]))
 
 
 def encode_message(type_: str, **fields: Any) -> str:
