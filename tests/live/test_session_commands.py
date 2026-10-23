@@ -3,6 +3,7 @@ import json
 import pytest
 from conftest import KB_FILES, make_kb_repo, minutes_content
 
+from kb_meeting_agent.commands import catalog_payload
 from kb_meeting_agent.live.audio import BYTES_PER_MS
 from kb_meeting_agent.live.protocol import AudioFrame
 from kb_meeting_agent.llm.fake import FakeProvider
@@ -262,6 +263,22 @@ async def test_resume_after_a_switch_uses_the_new_project(make_session, french_k
     assert second.meeting.project == "other"
 
 
+async def test_the_catalog_is_sent_on_connect(make_session):
+    session, link, *_ = make_session()
+    await session.on_event("connected", {"type": "hello"})
+    assert link.sent[0] == ("commands", {"commands": catalog_payload()})
+
+
+async def test_a_decision_proposed_while_switching_cancels_the_switch(make_session, french_kb):
+    session, link, *_ = make_session(fast=deciding(), second_kb=french_kb)
+    await session.on_event("message", chat("!start"))
+    await speak(session, start=0, ms=31_000)  # still being transcribed: no settle
+    await session.on_event("message", chat("!project other"))
+    assert session.meeting.project == "test"
+    assert link.texts()[-1].startswith("The project can no longer change")
+    await session.settle()
+
+
 async def test_start_does_not_resume_a_meeting_from_another_day(make_session):
     first, *_ = make_session()
     await first.on_event("message", chat("!start"))
@@ -348,16 +365,6 @@ async def test_slash_commands_from_outside_the_meeting_are_refused_too(make_sess
     await session.on_event("message", msg)
     assert session.meeting is not None
     assert link.of("reply")[-1]["text"].startswith("Only the meeting's participants")
-
-
-async def test_a_decision_proposed_while_switching_cancels_the_switch(make_session, french_kb):
-    session, link, *_ = make_session(fast=deciding(), second_kb=french_kb)
-    await session.on_event("message", chat("!start"))
-    await speak(session, start=0, ms=31_000)  # still being transcribed: no settle
-    await session.on_event("message", chat("!project other"))
-    assert session.meeting.project == "test"
-    assert link.texts()[-1].startswith("The project can no longer change")
-    await session.settle()
 
 
 async def test_start_naming_another_project_does_not_resume(make_session, french_kb):

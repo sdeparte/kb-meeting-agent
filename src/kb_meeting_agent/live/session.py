@@ -17,7 +17,7 @@ from kb_meeting_agent.agent.meeting import AgentSettings, MeetingAgent
 from kb_meeting_agent.agent.messages import t
 from kb_meeting_agent.agent.prompting import format_timestamp
 from kb_meeting_agent.agent.transcript import Transcript
-from kb_meeting_agent.commands import button_commands, help_text, parse, typed
+from kb_meeting_agent.commands import button_commands, catalog_payload, help_text, parse, typed
 from kb_meeting_agent.config import AppConfig, ProjectConfig, RepoConfig, TranscriptionConfig
 from kb_meeting_agent.kb.project import ProjectSources
 from kb_meeting_agent.live.audio import Utterance, UtteranceAssembler, speaker_file_id
@@ -254,6 +254,7 @@ class MeetingSession:
             log.warning("connector error: %s", msg.get("message"))
 
     async def _on_connected(self, hello: dict[str, Any]) -> None:
+        await self.deps.link.send("commands", commands=catalog_payload())
         self._buttons = bool((hello.get("capabilities") or {}).get("buttons", True))
         if self.meeting:
             self.meeting.sink.buttons = self._buttons

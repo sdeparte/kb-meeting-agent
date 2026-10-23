@@ -10,7 +10,7 @@ from websockets.asyncio.client import connect
 async def main() -> None:
     async with connect(os.environ["KBMA_CORE_URL"]) as ws:
         await ws.send(
-            json.dumps({"type": "hello", "secret": os.environ["KBMA_SECRET"], "protocol": 2})
+            json.dumps({"type": "hello", "secret": os.environ["KBMA_SECRET"], "protocol": 3})
         )
         await ws.send(
             json.dumps({"type": "error", "message": f"token={os.environ.get('DISCORD_TOKEN')}"})

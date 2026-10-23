@@ -53,3 +53,12 @@ async def test_messages_audio_and_replies(link):
         }
     assert await next_event(link) == ("disconnected", None)
     assert not await link.send("leave")
+
+
+async def test_another_protocol_version_is_refused_and_logged(link, caplog):
+    async with connect(link.url) as ws:
+        await ws.send(hello(protocol=2))
+        with pytest.raises(ConnectionClosed):
+            await ws.recv()
+    assert link.events.empty()
+    assert f"protocol 2, the core speaks {PROTOCOL_VERSION}" in caplog.text
