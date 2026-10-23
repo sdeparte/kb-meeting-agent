@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 
 async def test_search_merges_repos_and_labels_chunks(sources):
     hits = await sources.search("cooldown", k=10)
@@ -40,6 +42,24 @@ async def test_a_failing_repository_leaves_the_others(sources):
     sources.code_repos[0].search = broken
     hits = await sources.search("cooldown", k=5)
     assert hits and {h.repo for h in hits} == {"kb"}
+
+
+async def test_a_model_outage_or_a_failing_kb_is_not_swallowed(sources, monkeypatch):
+    from kb_meeting_agent.llm.base import LLMUnavailable
+
+    async def down(query, k):
+        raise LLMUnavailable("embedding server down")
+
+    async def broken(query, k):
+        raise RuntimeError("index locked")
+
+    monkeypatch.setattr(sources.code_repos[0], "search", down)
+    with pytest.raises(LLMUnavailable):
+        await sources.search("cooldown", k=5)
+    monkeypatch.setattr(sources.code_repos[0], "search", broken)
+    monkeypatch.setattr(sources, "_kb_search", broken)
+    with pytest.raises(RuntimeError):
+        await sources.search("cooldown", k=5, only_tags=("KnowledgeBase",))
 
 
 def _chunks(repo, tags, n):
