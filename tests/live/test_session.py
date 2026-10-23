@@ -276,7 +276,7 @@ async def test_the_answer_to_a_spoken_question_replies_to_its_announcement(make_
             "AddressedIntent": [
                 {"kind": "question", "question": "What is the cooldown?", "level": "none"}
             ],
-            "Queries": [{"queries": ["cooldown"]}],
+            "Queries": [{"queries": ["cooldown"], "tags": []}],
         }
     )
     strong = FakeProvider({"Answer": [{"covered": True, "answer": "45 s.", "sources": []}]})
