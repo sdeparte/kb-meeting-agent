@@ -148,6 +148,25 @@ def test_temperature_fallback_is_rejected_where_it_has_no_effect(tmp_path, monke
         load_config(write(tmp_path, text))
 
 
+@pytest.mark.parametrize(
+    ("role", "option"),
+    [
+        ("{provider: mlx-whisper, model: m, device: cpu}", "device"),
+        ("{provider: mlx-whisper, model: m, beam_size: 5}", "beam_size"),
+        ("{provider: faster-whisper, model: m, base_url: 'http://x'}", "base_url"),
+        ("{provider: openai-compatible, model: m, compute_type: int8}", "compute_type"),
+    ],
+)
+def test_an_engine_option_is_rejected_on_other_engines(tmp_path, monkeypatch, role, option):
+    for name in ("TEST_ANTHROPIC_KEY", "TEST_GITHUB_TOKEN", "TEST_DISCORD_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    text = CONFIG.format(data_dir=tmp_path) + LIVE.replace(
+        "{provider: mlx-whisper, model: mlx-community/whisper-large-v3-turbo}", role
+    )
+    with pytest.raises(ValidationError, match=f"{option} has no effect"):
+        load_config(write(tmp_path, text))
+
+
 def test_agent_names_is_no_longer_accepted(tmp_path, monkeypatch):
     monkeypatch.setenv("TEST_ANTHROPIC_KEY", "x")
     monkeypatch.setenv("TEST_GITHUB_TOKEN", "x")

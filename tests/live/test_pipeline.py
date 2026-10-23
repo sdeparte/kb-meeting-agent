@@ -2,7 +2,8 @@ import time
 
 from kb_meeting_agent.live.audio import BYTES_PER_MS, Utterance
 from kb_meeting_agent.live.pipeline import TranscriptionPipeline
-from kb_meeting_agent.transcription.base import HallucinationFilter, TranscriptionResult, write_wav
+from kb_meeting_agent.transcription.base import TranscriptionResult, write_wav
+from kb_meeting_agent.transcription.filtering import HallucinationFilter
 
 
 class SlowFirst:

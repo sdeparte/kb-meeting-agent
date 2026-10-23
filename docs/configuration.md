@@ -144,7 +144,7 @@ connector:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `language` | auto-detected | language passed to Whisper (`fr`, `en`…) |
+| `language` | auto-detected | language passed to the engine (`fr`, `en`…) |
 | `workers` | `2` | utterances transcribed at the same time |
 | `live` | (required) | engine used during the meeting |
 | `final` | none | engine for the second pass at the end; the minutes are written from it |
@@ -154,10 +154,10 @@ connector:
 | `max_compression_ratio` | `2.4` | transcriptions that compress better than this are dropped: Whisper stuck in a loop ("Eik, Disa, Eik, Disa, …"). Speech, even repeating a phrase three times, stays under 2; `null` disables. Whisper uses the same threshold |
 | `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
 | `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
-| `vocabulary` | `[]` | terms hinted to Whisper before the glossary, e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
+| `vocabulary` | `[]` | terms hinted before the glossary to the engines that take a prompt (the three Whisper engines), e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
 | `vocabulary_max_chars` | `600` | length of the vocabulary hint: the agent's `agent.name` (not its aliases), then `vocabulary`, then the terms of the KB glossary's tables (first cells, then `code` spans), leaving out status tags, commit hashes and, among the `code` spans, code identifiers |
 
-Engine keys (`live`, `final`):
+Engine keys (`live`, `final`). A key that only some engines read is refused on the others, so that a setting never silently does nothing:
 
 | Key | Meaning |
 |---|---|
@@ -165,7 +165,7 @@ Engine keys (`live`, `final`):
 | `model` | model name or Hugging Face repository |
 | `base_url`, `api_key` | `openai-compatible` only |
 | `device`, `compute_type`, `beam_size` | `faster-whisper` only (`auto`, `int8`, `1`) |
-| `temperature_fallback` | `mlx-whisper` and `faster-whisper` only, refused elsewhere (default `true`): when the text loops or the model is unsure, decode the utterance again at higher temperatures, up to 6 times. Set `false` on `live`: these retries are mostly on noise that is dropped anyway, and they hold up the utterances behind them (on recorded meetings: half of the GPU time, up to 8 s for one utterance, for 2 utterances in 100 rescued). Keep it on `final`, which has the time |
+| `temperature_fallback` | `mlx-whisper` and `faster-whisper` only (default `true`): when the text loops or the model is unsure, decode the utterance again at higher temperatures, up to 6 times. Set `false` on `live`: these retries are mostly on noise that is dropped anyway, and they hold up the utterances behind them (on recorded meetings: half of the GPU time, up to 8 s for one utterance, for 2 utterances in 100 rescued). Keep it on `final`, which has the time |
 
 Without a `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
 
