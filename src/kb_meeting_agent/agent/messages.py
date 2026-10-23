@@ -51,6 +51,12 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "meeting_already_running": "A meeting is already running.",
         "join_voice_first": "Join a voice channel first.",
         "unknown_project": "Unknown project. Available: {names}.",
+        "code_index_building": (
+            "Building the index of {repo}: answers about its code will improve once it is ready."
+        ),
+        "code_repo_unavailable": (
+            "The {repo} repository is unavailable: answers rely on the other sources."
+        ),
         "no_meeting": "No meeting is running.",
         "meeting_ending": "Ending the meeting: writing the minutes…",
         "meeting_already_ending": "The meeting is already ending.",
@@ -182,6 +188,13 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "meeting_already_running": "Une réunion est déjà en cours.",
         "join_voice_first": "Rejoignez d'abord un salon vocal.",
         "unknown_project": "Projet inconnu. Disponibles : {names}.",
+        "code_index_building": (
+            "Construction de l'index de {repo} : les réponses sur son code s'amélioreront "
+            "une fois l'index prêt."
+        ),
+        "code_repo_unavailable": (
+            "Le dépôt {repo} est indisponible : les réponses s'appuient sur les autres sources."
+        ),
         "no_meeting": "Aucune réunion en cours.",
         "meeting_ending": "Clôture de la réunion : rédaction du compte rendu…",
         "meeting_already_ending": "La réunion est déjà en cours de clôture.",
