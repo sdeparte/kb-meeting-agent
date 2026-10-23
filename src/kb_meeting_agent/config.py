@@ -141,6 +141,18 @@ class ConnectorConfig(_Strict):
     env: dict[str, str] = Field(default_factory=dict)
 
 
+# The engines each engine-specific option of TranscriberRole applies to. Adding an engine
+# means listing it under the options it reads; it is refused the others.
+_ENGINE_OPTIONS: dict[str, tuple[str, ...]] = {
+    "base_url": ("openai-compatible",),
+    "api_key": ("openai-compatible",),
+    "device": ("faster-whisper",),
+    "compute_type": ("faster-whisper",),
+    "beam_size": ("faster-whisper",),
+    "temperature_fallback": ("mlx-whisper", "faster-whisper"),
+}
+
+
 class TranscriberRole(_Strict):
     provider: Literal["mlx-whisper", "faster-whisper", "openai-compatible", "fake"]
     model: str
@@ -149,20 +161,19 @@ class TranscriberRole(_Strict):
     device: str = "auto"
     compute_type: str = "int8"
     beam_size: int = Field(1, ge=1)
-    # mlx-whisper, faster-whisper: decode again at higher temperatures when the text loops or
-    # the model is unsure (up to 6 decodings of the utterance)
+    # Decode again at higher temperatures when the text loops or the model is unsure (up to 6
+    # decodings of the utterance)
     temperature_fallback: bool = True
 
     @model_validator(mode="after")
-    def _temperature_fallback_needs_a_local_engine(self) -> TranscriberRole:
-        if "temperature_fallback" in self.model_fields_set and self.provider not in (
-            "mlx-whisper",
-            "faster-whisper",
-        ):
-            raise ValueError(
-                f"temperature_fallback has no effect with the {self.provider} provider; "
-                "only mlx-whisper and faster-whisper retry decodings"
-            )
+    def _options_of_another_engine(self) -> TranscriberRole:
+        for option in sorted(self.model_fields_set & _ENGINE_OPTIONS.keys()):
+            engines = _ENGINE_OPTIONS[option]
+            if self.provider not in engines:
+                raise ValueError(
+                    f"{option} has no effect with the {self.provider} provider; "
+                    f"only {' and '.join(engines)} read it"
+                )
         return self
 
 
@@ -177,7 +188,8 @@ class TranscriptionConfig(_Strict):
     min_voiced_seconds: float = Field(0.2, ge=0)
     min_avg_logprob: float | None = -1.0
     max_compression_ratio: float | None = Field(2.4, gt=0)
-    vocabulary: list[str] = Field(default_factory=list)  # hinted to Whisper before the glossary
+    # hinted before the glossary to the engines that take a prompt
+    vocabulary: list[str] = Field(default_factory=list)
     vocabulary_max_chars: int = Field(600, ge=0)
 
 

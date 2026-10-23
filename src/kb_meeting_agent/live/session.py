@@ -26,13 +26,9 @@ from kb_meeting_agent.llm.base import LLMProvider
 from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import OutMessage, PrRef, Publisher
 from kb_meeting_agent.publish.local import INDEX_ROWS_FILE, LocalKeeper
-from kb_meeting_agent.transcription.base import (
-    HallucinationFilter,
-    Transcriber,
-    pcm16_to_float,
-    read_wav,
-    vocabulary_prompt,
-)
+from kb_meeting_agent.transcription.base import Transcriber, pcm16_to_float, read_wav
+from kb_meeting_agent.transcription.filtering import HallucinationFilter
+from kb_meeting_agent.transcription.vocabulary import vocabulary_prompt
 
 log = logging.getLogger(__name__)
 

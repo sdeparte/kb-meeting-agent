@@ -6,12 +6,8 @@ from collections.abc import Awaitable, Callable
 
 from kb_meeting_agent.live.audio import Utterance
 from kb_meeting_agent.models import Segment
-from kb_meeting_agent.transcription.base import (
-    HallucinationFilter,
-    Transcriber,
-    pcm16_to_float,
-    read_wav,
-)
+from kb_meeting_agent.transcription.base import Transcriber, pcm16_to_float, read_wav
+from kb_meeting_agent.transcription.filtering import HallucinationFilter
 
 log = logging.getLogger(__name__)
 
