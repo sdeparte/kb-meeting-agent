@@ -124,10 +124,10 @@ def code_origin(tmp_path) -> Path:
 
 
 @pytest.fixture
-async def kb(tmp_path, kb_origin):
+async def kb_repo(tmp_path, kb_origin):
     config = RepoConfig(repo="acme/kb", clone_url=str(kb_origin), tags=["KnowledgeBase"])
     knowledge_base = GitMarkdownKnowledgeBase(
-        "test", config, tmp_path / "data", FakeProvider().embed, embedding_model="fake"
+        "kb", config, tmp_path / "data", FakeProvider().embed, embedding_model="fake"
     )
     await knowledge_base.sync()
     yield knowledge_base
@@ -135,7 +135,13 @@ async def kb(tmp_path, kb_origin):
 
 
 @pytest.fixture
-async def sources(tmp_path, kb, code_origin):
+def kb(kb_repo):
+    """The `kb_repo` knowledge base alone, behind the agent's KnowledgeBase port."""
+    return ProjectSources(kb_repo, "kb", ("KnowledgeBase",), [], links={})
+
+
+@pytest.fixture
+async def sources(tmp_path, kb_repo, code_origin):
     """The `kb` fixture plus a `back` code repository (CodeBase, BackEnd)."""
     back = GitCodeRepository(
         "back",
@@ -146,7 +152,7 @@ async def sources(tmp_path, kb, code_origin):
     )
     await back.sync()
     yield ProjectSources(
-        kb,
+        kb_repo,
         "kb",
         ("KnowledgeBase",),
         [back],

@@ -7,7 +7,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
 
-from kb_meeting_agent.config import KNOWLEDGE_BASE, RepoConfig
+from kb_meeting_agent.config import RepoConfig
 from kb_meeting_agent.conventions import KbConventions, load_conventions, load_template
 from kb_meeting_agent.kb.chunker import chunk_markdown
 from kb_meeting_agent.kb.git import GitCheckout, KbSyncError
@@ -61,33 +61,8 @@ class GitMarkdownKnowledgeBase(GitCheckout):
             return conventions
         return conventions.model_copy(update={"language": self._config.language})
 
-    async def search(
-        self,
-        query: str,
-        k: int = 8,
-        prefer_tags: tuple[str, ...] = (),
-        only_tags: tuple[str, ...] = (),
-    ) -> list[Chunk]:
-        if only_tags and KNOWLEDGE_BASE not in only_tags:
-            return []
+    async def search(self, query: str, k: int = 8) -> list[Chunk]:
         return await self._index.search(query, k=k, boost_paths=self._conventions.authoritative)
-
-    @property
-    def has_code(self) -> bool:
-        return False
-
-    @property
-    def free_tags(self) -> list[str]:
-        return []
-
-    def link(self, chunk: Chunk) -> str | None:
-        return None
-
-    def link_file(self, repo: str, path: str) -> str | None:
-        return None
-
-    def code_exists(self, repo: str, path: str) -> bool:
-        return False
 
     def section(self, chunk: Chunk) -> list[Chunk]:
         return self._index.section(chunk.path, chunk.headings, chunk.text)
