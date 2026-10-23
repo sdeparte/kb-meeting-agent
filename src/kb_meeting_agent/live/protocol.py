@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Any
 
 PROTOCOL_VERSION = 2
+# Exit code of a connector refusing its env (a missing credential): it is not restarted
+CONFIG_ERROR_EXIT = 78
 AUDIO_FRAME = 0x01
 # kind, timestamp, length of the speaker id; then the id (UTF-8), then the PCM
 _HEADER = struct.Struct(">BQB")

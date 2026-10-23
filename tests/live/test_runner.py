@@ -3,8 +3,17 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 from kb_meeting_agent.config import AppConfig
-from kb_meeting_agent.live.runner import ConnectorProcess, connector_command, connector_env, run
+from kb_meeting_agent.live.protocol import CONFIG_ERROR_EXIT
+from kb_meeting_agent.live.runner import (
+    ConnectorConfigError,
+    ConnectorProcess,
+    connector_command,
+    connector_env,
+    run,
+)
 
 FAKE = Path(__file__).with_name("fake_connector.py")
 
@@ -61,6 +70,27 @@ async def test_a_connector_that_cannot_start_is_retried(tmp_path, caplog):
     await task  # the supervisor is still alive: it did not die on the first failure
     assert process.runs >= 2
     assert "connector could not be started" in caplog.text
+
+
+async def test_a_connector_refusing_its_configuration_is_not_restarted(tmp_path, caplog):
+    code = f"raise SystemExit({CONFIG_ERROR_EXIT})"
+    process = ConnectorProcess([sys.executable, "-c", code], dict(os.environ), backoff_initial=0.01)
+    await asyncio.wait_for(process.run(asyncio.Event()), 10)
+    assert process.runs == 1 and process.refused
+    assert "refused its configuration" in caplog.text
+
+
+async def test_run_stops_when_the_connector_refuses_its_configuration(tmp_path):
+    code = f"raise SystemExit({CONFIG_ERROR_EXIT})"
+    with pytest.raises(ConnectorConfigError):
+        await asyncio.wait_for(run(config(tmp_path), connector=[sys.executable, "-c", code]), 15)
+
+
+async def test_run_refuses_a_bundled_connector_that_does_not_exist(tmp_path):
+    cfg = config(tmp_path)
+    cfg.connector.name = "discrod"
+    with pytest.raises(ConnectorConfigError, match="connector-discrod"):
+        await run(cfg)
 
 
 def test_connector_command_and_minimal_env(tmp_path, monkeypatch):

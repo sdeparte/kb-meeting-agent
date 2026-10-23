@@ -13,6 +13,7 @@ from typing import Any
 from kb_meeting_agent.config import AppConfig, ProjectConfig, RepoConfig
 from kb_meeting_agent.kb.project import ProjectSources, build_sources
 from kb_meeting_agent.live.link import ConnectorLink
+from kb_meeting_agent.live.protocol import CONFIG_ERROR_EXIT
 from kb_meeting_agent.live.session import MeetingSession, SessionDeps
 from kb_meeting_agent.llm.factory import build_provider
 from kb_meeting_agent.ports import Publisher
@@ -24,6 +25,10 @@ log = logging.getLogger(__name__)
 
 CHECKOUT_DIR = Path(__file__).resolve().parents[3]  # bundled connectors: connector-<name>/
 _PASSED_THROUGH = ("PATH", "HOME", "LANG", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP")
+
+
+class ConnectorConfigError(Exception):
+    """The connector cannot run with this configuration: restarting it would not help."""
 
 
 class ConnectorProcess:
@@ -43,6 +48,7 @@ class ConnectorProcess:
         self._max = backoff_max
         self._stable_after = stable_after
         self.runs = 0
+        self.refused = False
 
     async def run(self, stop: asyncio.Event) -> None:
         delay = self._initial
@@ -69,6 +75,10 @@ class ConnectorProcess:
                             await asyncio.wait_for(process.wait(), 10)
                         except TimeoutError:
                             process.kill()
+                    return
+                if process.returncode == CONFIG_ERROR_EXIT:
+                    log.error("connector refused its configuration; see its log above")
+                    self.refused = True
                     return
                 outcome = f"exited with {process.returncode}"
             if time.monotonic() - started > self._stable_after:
@@ -132,6 +142,10 @@ async def run(
     observe: Callable[[str, Any], None] | None = None,
 ) -> None:
     stop = stop or asyncio.Event()
+    command = connector or connector_command(config)
+    assert config.connector is not None
+    if connector is None and not config.connector.command and not Path(command[1]).is_file():
+        raise ConnectorConfigError(f"no connector at {command[1]}: check connector.name or dir")
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGINT, signal.SIGTERM):
         try:
@@ -142,13 +156,12 @@ async def run(
     link = ConnectorLink(secret)
     url = await link.start()
     session = MeetingSession(_deps(config, link))
-    process = ConnectorProcess(
-        connector or connector_command(config), connector_env(url, secret, config)
-    )
+    process = ConnectorProcess(command, connector_env(url, secret, config))
     # Stopping is two-step: the meeting is closed while the connector still runs (so the
     # channel gets the minutes link and the bot leaves), then the connector is stopped.
     stop_connector = asyncio.Event()
     supervisor = asyncio.create_task(process.run(stop_connector))
+    supervisor.add_done_callback(lambda _: stop.set())  # a refused connector stops the run
     stopper = asyncio.create_task(stop.wait())
     try:
         while not stop.is_set():
@@ -176,3 +189,5 @@ async def run(
                 loop.remove_signal_handler(signum)
             except (NotImplementedError, RuntimeError):
                 pass
+    if process.refused:
+        raise ConnectorConfigError("the connector refused its configuration (connector.env)")

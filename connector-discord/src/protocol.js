@@ -1,6 +1,8 @@
 // Connector <-> core protocol, version 2. Mirrors src/kb_meeting_agent/live/protocol.py.
 // Ids (speakers, channels, interactions) are opaque strings: here, Discord snowflakes.
 export const PROTOCOL_VERSION = 2;
+// Exit code when the env is refused (a missing credential): the core does not restart us
+export const CONFIG_ERROR_EXIT = 78;
 export const AUDIO_FRAME = 0x01;
 // kind (1 byte), timestamp (8), length of the speaker id (1); then the id (UTF-8), then the PCM
 const HEADER_SIZE = 10;
