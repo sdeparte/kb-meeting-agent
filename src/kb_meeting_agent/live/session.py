@@ -34,6 +34,8 @@ from kb_meeting_agent.transcription.vocabulary import vocabulary_prompt
 log = logging.getLogger(__name__)
 
 LOST_VOICE_STATES = ("disconnected", "destroyed", "lost")
+# A connector that cannot rejoin on its own (a browser account must be invited into the call).
+INVITE_NEEDED = "needs_invite"
 MAX_SECOND_PASS_FAILURES = 3
 # Commands that change the meeting itself: only from its call or its text channel.
 PARTICIPANT_COMMANDS = frozenset(
@@ -148,6 +150,7 @@ class ActiveMeeting:
     opted_out: set[str] = field(default_factory=set)
     closing: bool = False
     voice_ready: asyncio.Event = field(default_factory=asyncio.Event)
+    invite_asked: bool = False  # participants asked to invite the agent again, since the last ready
     joiner: asyncio.Task[None] | None = None
     code_sync: asyncio.Task[None] | None = None
 
@@ -309,13 +312,17 @@ class MeetingSession:
     async def _on_voice_state(self, status: str) -> None:
         m = self.meeting
         assert m is not None
-        if status in LOST_VOICE_STATES:
+        if status in LOST_VOICE_STATES or status == INVITE_NEEDED:
             m.voice_ready.clear()
             self._gap_start()
             self._keep_joining(m)
+            if status == INVITE_NEEDED and not m.invite_asked:
+                m.invite_asked = True
+                await m.sink.send(OutMessage(t(m.lang, "invite_agent_again")))
             return
         if status == "ready":
             m.voice_ready.set()
+            m.invite_asked = False
         if status == "ready" and m.gap_started_ms is not None:
             start, end = m.relative_s(m.gap_started_ms), m.relative_s(self.deps.clock_ms())
             m.gap_started_ms = None

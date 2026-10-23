@@ -8,7 +8,8 @@ commands, buttons and modals, which opt-out relies on.
 Version 3: the connector's `hello` may carry `capabilities` (`buttons: false` when it cannot
 show buttons); the core sends the command catalog in a `commands` message once connected
 (each command's slash path and chat `words`), and the connector forwards chat lines starting
-with `!` as `chat` messages.
+with `!` as `chat` messages. A connector that cannot rejoin a call on its own reports the
+`voice_state` `needs_invite`: the core asks the participants to invite the agent again.
 """
 
 from __future__ import annotations
