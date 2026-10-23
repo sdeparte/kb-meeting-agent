@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 import subprocess
@@ -67,13 +68,18 @@ DEFAULT_CODE_EXCLUDE = (
 )
 
 # A file holding one of these is not indexed whatever its name: private keys, GitHub, AWS,
-# OpenAI-style and Slack tokens.
+# OpenAI-style, Slack, Stripe, Google and GitLab tokens, and a password in a URL (not a
+# ${VARIABLE} one).
 SECRET_CONTENT = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
     r"|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{20,}"
     r"|\bAKIA[0-9A-Z]{16}\b"
     r"|\bsk-[A-Za-z0-9_-]{20,}"
     r"|\bxox[abposr]-[A-Za-z0-9-]{10,}"
+    r"|\b[rs]k_live_[0-9A-Za-z]{20,}"
+    r"|\bAIza[0-9A-Za-z_-]{35}"
+    r"|\bglpat-[0-9A-Za-z_-]{20,}"
+    r"|://[^\s/:@]+:(?![$%{<])[^\s/@]+@"
 )
 
 
@@ -195,17 +201,28 @@ class GitCodeRepository(GitCheckout):
         """Only an indexed file can be cited: secrets and generated files never are."""
         return path in self._index.file_hashes()
 
-    def _changes(self, known: dict[str, str]) -> tuple[set[str], list[tuple[str, str, str]]]:
-        """The files to index, and the (path, blob id, text) of those that changed. Run in a
-        thread: a repository of thousands of files must not stall the meeting."""
+    def _changes(
+        self, known: dict[str, str], secret: dict[str, str]
+    ) -> tuple[set[str], list[tuple[str, str, str]], dict[str, str]]:
+        """The files to index, the (path, blob id, text) of those that changed, and the blob id
+        of each file holding a secret. Run in a thread: a repository of thousands of files must
+        not stall the meeting. A file known to hold a secret is not read again until it changes.
+        """
         blobs = _tracked(self.repo_dir)
         current = select_code_files(self.repo_dir, self._config.include, self._config.exclude)
-        changed = [
-            (path, blobs[path], _read_source(self.repo_dir / path))
-            for path in current
-            if known.get(path) != blobs[path]
-        ]
-        return set(current), changed
+        changed, secret_now = [], {}
+        for path in current:
+            blob = blobs[path]
+            if secret.get(path) == blob:
+                secret_now[path] = blob
+            elif known.get(path) != blob:
+                text = _read_source(self.repo_dir / path)
+                if SECRET_CONTENT.search(text):
+                    log.warning("%s: %s looks like it holds a secret: not indexed", self.name, path)
+                    secret_now[path] = blob
+                else:
+                    changed.append((path, blob, text))
+        return set(current), changed, secret_now
 
     async def _reindex(self) -> None:
         # Path rules (include, exclude, size) need no rebuild: a file they now skip is removed
@@ -214,14 +231,14 @@ class GitCodeRepository(GitCheckout):
         key = hashlib.sha256((SECRET_CONTENT.pattern + self._embedding_model).encode()).hexdigest()
         if self._index.get_meta("index_key") != key:
             self._index.clear()
+            self._index.set_meta("secret_blobs", "{}")
             self._index.set_meta("index_key", key)
         known = self._index.file_hashes()
-        current, changed = await asyncio.to_thread(self._changes, known)
-        for path in known.keys() - current:
+        secret = json.loads(self._index.get_meta("secret_blobs") or "{}")
+        current, changed, secret = await asyncio.to_thread(self._changes, known, secret)
+        for path in (known.keys() - current) | (known.keys() & secret.keys()):
             self._index.remove_file(path)
+        # kept out of the files table: exists() would make them citable
+        self._index.set_meta("secret_blobs", json.dumps(secret))
         for path, blob, text in changed:
-            if SECRET_CONTENT.search(text):
-                log.warning("%s: %s looks like it holds a secret: not indexed", self.name, path)
-                self._index.remove_file(path)
-                continue
             await self._index.upsert_file(path, blob, chunk_code(self.name, self.tags, path, text))
