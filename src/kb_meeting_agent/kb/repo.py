@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import logging
-import os
-import subprocess
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
@@ -13,20 +10,19 @@ from typing import Literal
 from kb_meeting_agent.config import RepoConfig
 from kb_meeting_agent.conventions import KbConventions, load_conventions, load_template
 from kb_meeting_agent.kb.chunker import chunk_markdown
+from kb_meeting_agent.kb.git import GitCheckout, KbSyncError
 from kb_meeting_agent.kb.index import Embedder, SearchIndex
 from kb_meeting_agent.models import Chunk
 
 log = logging.getLogger(__name__)
 
+__all__ = ["GitMarkdownKnowledgeBase", "KbSyncError"]
+
 INSTRUCTIONS_MAX_CHARS = 12000
 GLOSSARY_MAX_CHARS = 4000
 
 
-class KbSyncError(Exception):
-    """Raised when the KB repository cannot be cloned or updated."""
-
-
-class GitMarkdownKnowledgeBase:
+class GitMarkdownKnowledgeBase(GitCheckout):
     def __init__(
         self,
         name: str,
@@ -36,10 +32,9 @@ class GitMarkdownKnowledgeBase:
         embedding_model: str,
         root: Path | None = None,  # where the clone and index live; data_dir/kb/<name> if None
     ) -> None:
-        self.name = name
-        self._config = config
         root = root or data_dir / "kb" / name
-        self.repo_dir = root / "repo"
+        super().__init__(config, root / "repo")
+        self.name = name
         self._index = SearchIndex(root / "index.sqlite", embed)
         self._embedding_model = embedding_model
         self._conventions = self._with_language(KbConventions())
@@ -112,52 +107,6 @@ class GitMarkdownKnowledgeBase:
         if not path.is_relative_to(root):
             raise ValueError(f"path outside the KB: {relative}")
         return path
-
-    def _clone_url(self) -> str:
-        return self._config.clone_url or f"https://github.com/{self._config.repo}.git"
-
-    def _basic_credential(self) -> str | None:
-        if not self._config.token:
-            return None
-        return base64.b64encode(f"x-access-token:{self._config.token}".encode()).decode()
-
-    def _git_env(self) -> dict[str, str]:
-        """Auth through the environment: never written to .git/config, never in argv, and
-        scoped to github.com so a custom clone_url host never receives the token."""
-        env = dict(os.environ)
-        credential = self._basic_credential()
-        if credential:
-            env |= {
-                "GIT_CONFIG_COUNT": "1",
-                "GIT_CONFIG_KEY_0": "http.https://github.com/.extraHeader",
-                "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credential}",
-            }
-        return env
-
-    def _redact(self, message: str) -> str:
-        for secret in (self._config.token, self._basic_credential()):
-            if secret:
-                message = message.replace(secret, "***")
-        return message
-
-    def _git(self, *args: str) -> None:
-        try:
-            subprocess.run(
-                ["git", *args], check=True, capture_output=True, text=True, env=self._git_env()
-            )
-        except subprocess.CalledProcessError as exc:
-            raise KbSyncError(self._redact(exc.stderr or str(exc))) from None
-
-    def _git_sync(self) -> None:
-        branch = self._config.base_branch
-        if not (self.repo_dir / ".git").exists():
-            self.repo_dir.parent.mkdir(parents=True, exist_ok=True)
-            self._git("clone", "--quiet", "--branch", branch, self._clone_url(), str(self.repo_dir))
-            return
-        repo = str(self.repo_dir)
-        self._git("-C", repo, "remote", "set-url", "origin", self._clone_url())
-        self._git("-C", repo, "fetch", "--quiet", "origin", branch)
-        self._git("-C", repo, "reset", "--quiet", "--hard", f"origin/{branch}")
 
     def _markdown_files(self) -> dict[str, Path]:
         patterns = [".git/**", *self._conventions.exclude]
