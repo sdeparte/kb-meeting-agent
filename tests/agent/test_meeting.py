@@ -271,6 +271,29 @@ async def test_an_announcement_is_answered_when_the_model_fails(make_agent):
     ]
 
 
+async def test_an_embedding_outage_pauses_the_checks_instead_of_finding_nothing(
+    make_agent, kb, monkeypatch
+):
+    async def down(texts):
+        raise LLMUnavailable("embedding server down")
+
+    monkeypatch.setattr(kb.knowledge_base._index, "_embed", down)
+    fast = FakeProvider(
+        {
+            "Extraction": [extraction()],
+            "AddressedIntent": [
+                {"kind": "question", "question": "What is the cooldown?", "level": "none"}
+            ],
+            "Queries": [{"queries": ["cooldown"], "code": False, "tags": []}],
+        }
+    )
+    agent, *_, sink = make_agent(fast)
+    await agent.on_segment(seg(0, "Scribe, what is the cooldown?"))
+    texts = sink.texts()
+    assert any(text.startswith("Checks paused") for text in texts)
+    assert not any("does not cover" in text for text in texts)
+
+
 async def test_voice_commands(make_agent):
     fast = FakeProvider(
         {

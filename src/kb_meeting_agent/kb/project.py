@@ -11,6 +11,7 @@ from kb_meeting_agent.conventions import KbConventions
 from kb_meeting_agent.kb.code import GitCodeRepository
 from kb_meeting_agent.kb.index import Embedder
 from kb_meeting_agent.kb.repo import GLOSSARY_MAX_CHARS, GitMarkdownKnowledgeBase
+from kb_meeting_agent.llm.base import LLMError
 from kb_meeting_agent.models import Chunk
 
 log = logging.getLogger(__name__)
@@ -83,7 +84,11 @@ class ProjectSources:
                 continue
             try:
                 results = await search(query, k=k)
+            except LLMError:
+                raise  # one embedder for every repository: the meeting pauses its checks
             except Exception:
+                if name == self._kb_name:
+                    raise  # a KB that cannot be searched must not read as "the KB doesn't say"
                 log.exception("searching the %s repository failed", name)
                 continue
             preferred = name == self._kb_name or set(prefer_tags) & set(tags)
