@@ -174,6 +174,10 @@ class GitCodeRepository(GitCheckout):
     def indexed(self) -> bool:
         return bool(self._index.file_hashes())
 
+    @property
+    def file_count(self) -> int:
+        return len(self._index.file_hashes())
+
     def close(self) -> None:
         self._index.close()
 

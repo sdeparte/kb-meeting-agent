@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import Literal
 
-from kb_meeting_agent.config import CODE_BASE, KNOWLEDGE_BASE
+from kb_meeting_agent.config import CODE_BASE, KNOWLEDGE_BASE, ProjectConfig
 from kb_meeting_agent.conventions import KbConventions
 from kb_meeting_agent.kb.code import GitCodeRepository
+from kb_meeting_agent.kb.index import Embedder
 from kb_meeting_agent.kb.repo import GLOSSARY_MAX_CHARS, GitMarkdownKnowledgeBase
 from kb_meeting_agent.models import Chunk
 
@@ -36,6 +38,10 @@ class ProjectSources:
     @property
     def conventions(self) -> KbConventions:
         return self._kb.conventions
+
+    @property
+    def knowledge_base(self) -> GitMarkdownKnowledgeBase:
+        return self._kb
 
     @property
     def free_tags(self) -> list[str]:
@@ -122,3 +128,23 @@ class ProjectSources:
 
     def template(self, kind: Literal["decision", "minutes"]) -> str:
         return self._kb.template(kind)
+
+
+def build_sources(
+    name: str, project: ProjectConfig, data_dir: Path, embed: Embedder, embedding_model: str
+) -> ProjectSources:
+    """A project's repositories, cloned and indexed under <data_dir>/projects/<name>/<repo>."""
+    root = data_dir / "projects" / name
+    kb_name, kb_config = project.knowledge_base
+    kb = GitMarkdownKnowledgeBase(
+        kb_name, kb_config, data_dir, embed, embedding_model, root=root / kb_name
+    )
+    code = [
+        GitCodeRepository(repo_name, repo, root / repo_name, embed, embedding_model)
+        for repo_name, repo in project.code_repos
+    ]
+    links = {
+        repo_name: f"https://github.com/{repo.repo}/blob/{repo.base_branch}"
+        for repo_name, repo in project.code_repos
+    }
+    return ProjectSources(kb, kb_name, tuple(kb_config.tags), code, links)

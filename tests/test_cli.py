@@ -81,3 +81,53 @@ projects: {}
     )
     assert main(["run", "--config", str(config)]) == 2
     assert "discord" in capsys.readouterr().err
+
+
+def project_config(tmp_path, kb_origin, code_url):
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+data_dir: {tmp_path / "data"}
+llm:
+  fast: {{provider: fake, model: fake}}
+  strong: {{provider: fake, model: fake}}
+  embedding: {{provider: fake, model: fake}}
+projects:
+  test:
+    repos:
+      kb: {{repo: acme/kb, clone_url: "{kb_origin}", tags: [KnowledgeBase]}}
+      back: {{repo: acme/back, clone_url: "{code_url}", tags: [CodeBase, BackEnd]}}
+""",
+        encoding="utf-8",
+    )
+    return config
+
+
+def test_index_command_indexes_every_repo(tmp_path, kb_origin, code_origin, capsys):
+    config = project_config(tmp_path, kb_origin, code_origin)
+    assert main(["index", "--config", str(config), "--project", "test"]) == 0
+    out = capsys.readouterr().out
+    assert "indexed kb:" in out and "indexed back: 2 files" in out
+
+
+def test_index_command_reports_an_unavailable_repo(tmp_path, kb_origin, capsys):
+    config = project_config(tmp_path, kb_origin, tmp_path / "nonexistent")
+    assert main(["index", "--config", str(config), "--project", "test"]) == 1
+    captured = capsys.readouterr()
+    assert "indexed kb:" in captured.out and "back:" in captured.err
+
+
+def test_index_command_goes_on_after_any_repository_error(
+    tmp_path, kb_origin, code_origin, capsys, monkeypatch
+):
+    from kb_meeting_agent.kb.code import GitCodeRepository
+
+    async def failing_sync(self):
+        raise RuntimeError("embedding server unreachable")
+
+    monkeypatch.setattr(GitCodeRepository, "sync", failing_sync)
+    config = project_config(tmp_path, kb_origin, code_origin)
+    assert main(["index", "--config", str(config), "--project", "test"]) == 1
+    captured = capsys.readouterr()
+    assert "indexed kb:" in captured.out
+    assert "back: embedding server unreachable" in captured.err

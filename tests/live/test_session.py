@@ -296,3 +296,41 @@ async def test_each_meeting_gives_its_messages_ids_of_its_own():
     link = FakeLink()
     first, second = ConnectorSink(link, "t1"), ConnectorSink(link, "t2")
     assert await first.send(OutMessage("a")) != await second.send(OutMessage("b"))
+
+
+async def test_code_sync_runs_in_the_background(make_session, code_origin):
+    session, link, *_ = make_session(code=str(code_origin))
+    await start(session)
+    assert link.of("join")
+    await session.meeting.code_sync
+    assert any("Building the index of back" in text for text in link.texts())
+    assert session.meeting.kb.code_repos[0].indexed
+    [hit, *_] = await session.meeting.kb.search("COOLDOWN_SECONDS", prefer_tags=("BackEnd",))
+    assert hit.repo == "back"
+
+
+async def test_an_unavailable_code_repo_is_reported_once(make_session, tmp_path):
+    session, link, *_ = make_session(code=str(tmp_path / "nonexistent"))
+    await start(session)
+    await session.meeting.code_sync
+    assert sum("back repository is unavailable" in text for text in link.texts()) == 1
+    assert link.of("reply")[-1]["text"] == "Meeting started with the test project."
+
+
+async def test_closing_stops_the_code_sync(make_session, code_origin):
+    session, *_ = make_session(code=str(code_origin))
+    await start(session)
+    sync = session.meeting.code_sync
+    await session.close()
+    assert sync.done()
+
+
+async def test_closing_releases_the_project_sources(make_session, code_origin):
+    session, *_ = make_session(code=str(code_origin))
+    await start(session)
+    sources = session.meeting.kb
+    closed = []
+    original = sources.close
+    sources.close = lambda: closed.append(1) or original()
+    await session.close()
+    assert closed == [1]
