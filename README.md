@@ -101,6 +101,8 @@ A code repository needs only a read-only token (Contents: read), and only when i
 uv run kb-meeting-agent index --project my-project
 ```
 
+**Upgrading from `knowledge_bases`.** Each former entry becomes a project with one repository tagged `KnowledgeBase`. Before upgrading, close or `/meeting retry-publish` every pending meeting: meetings saved by the previous version can neither be resumed nor republished. The KB is cloned and indexed again under `projects/`; the former `<data_dir>/kb/` directory can then be deleted.
+
 ### 5. Describe your KB's conventions (optional)
 
 Add a `.meeting-agent.yml` at the root of the KB repository to tell the agent its language, which files to skip, how decision records are named and numbered, where minutes go, and which status tags the pages use. Without it, the agent uses English and generic defaults. See [docs/configuration.md](docs/configuration.md#kb-conventions-meeting-agentyml).
@@ -187,7 +189,7 @@ The agent registers its slash commands on the server, starts the connector and r
 | Command | Effect |
 |---|---|
 | `/meeting start project:<name> [level]` | joins your voice channel and posts the recording notice |
-| `/ask <question>` | answers from the KB and the code |
+| `/ask <question>` | answers from the KB (and the code, for questions about it) |
 | `/meeting level <level>` | `silent`, `contradictions` or `context` |
 | `/meeting optout` | stops transcribing your voice |
 | `/meeting end` | writes the minutes and opens the pull requests |
