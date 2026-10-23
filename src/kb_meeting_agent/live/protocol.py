@@ -3,7 +3,9 @@
 Platform-neutral: ids (users, channels, interactions) are opaque strings chosen by the
 connector, such as a Discord snowflake, a Slack user id or a Meet participant resource name.
 A user has one id: the `user_id` of audio frames and `speaking` is the `user.id` of their
-commands, buttons and modals, which opt-out relies on.
+commands, buttons and modals, which opt-out relies on. When the platform's chat only gives an
+author's name, shared by several participants, a `chat` message's `user` also carries
+`speaker_ids`: the audio ids the author may be, all opted out by an opt-out.
 
 Version 3: the connector's `hello` may carry `capabilities` (`buttons: false` when it cannot
 show buttons); the core sends the command catalog in a `commands` message once connected
