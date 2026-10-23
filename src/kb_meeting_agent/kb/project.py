@@ -98,6 +98,10 @@ class ProjectSources:
             return None
         return f"{base}/{chunk.path}#L{chunk.start_line}-L{chunk.end_line}"
 
+    def link_file(self, repo: str, path: str) -> str | None:
+        base = self._links.get(repo)
+        return f"{base}/{path}" if base else None
+
     def code_exists(self, repo: str, path: str) -> bool:
         return any(r.name == repo and r.exists(path) for r in self.code_repos)
 

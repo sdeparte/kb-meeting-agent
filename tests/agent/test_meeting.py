@@ -25,6 +25,7 @@ DRAFT = {
         {"path": "reference/configuration.md", "section": "Neutralization", "reason": "value"},
         {"path": "nope.md", "section": "X", "reason": "invented"},
     ],
+    "related_code": [],
 }
 VERDICT = {
     "verdict": "contradicts",
@@ -745,3 +746,23 @@ async def test_context_links_point_at_the_kb_only(make_agent, sources):
     await agent.on_segment(seg(0, "on regarde RelayConfigProvider"))
     assert searched == [("KnowledgeBase",)]
     assert sink.messages and "back:" not in sink.texts()[-1]
+
+
+async def test_invented_code_files_are_dropped(make_agent, sources):
+    draft = DRAFT | {
+        "related_code": [
+            {"repo": "back", "path": "lib/game/cooldown.dart", "reason": "value"},
+            {"repo": "back", "path": "lib/game/invented.dart", "reason": "invented"},
+            {"repo": "back", "path": ".env", "reason": "secret"},
+        ]
+    }
+    fast = FakeProvider({"Extraction": [extraction(decisions=[DECISION])]})
+    strong = FakeProvider({"DecisionDraft": [draft]})
+    agent, _, _, publisher, _ = make_agent(fast, strong)
+    agent.kb = sources
+    await agent.on_segment(seg(0, "ok on passe à 30"))
+    await agent.on_button("decision:d1:validate", "Bob")
+    body = publisher.prs[0][3]
+    assert "## Code files that may be affected" in body
+    assert "https://github.com/acme/back/blob/main/lib/game/cooldown.dart" in body
+    assert "invented.dart" not in body and ".env" not in body

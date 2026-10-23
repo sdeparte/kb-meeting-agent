@@ -75,6 +75,9 @@ class GitMarkdownKnowledgeBase(GitCheckout):
     def link(self, chunk: Chunk) -> str | None:
         return None
 
+    def link_file(self, repo: str, path: str) -> str | None:
+        return None
+
     def code_exists(self, repo: str, path: str) -> bool:
         return False
 

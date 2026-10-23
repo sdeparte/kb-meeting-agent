@@ -96,6 +96,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "## Pages that may need an update\n\n{related}\n"
         ),
         "no_related_pages": "None identified.",
+        "decision_pr_code": "\n## Code files that may be affected\n\n{items}\n",
         "minutes_pr_title": "Minutes: {title}",
         "minutes_pr_body": "Minutes of the meeting of {date}. Participants: {participants}.",
         "someone": "Someone",
@@ -227,6 +228,7 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "## Pages qui semblent concernées\n\n{related}\n"
         ),
         "no_related_pages": "Aucune identifiée.",
+        "decision_pr_code": "\n## Fichiers de code qui semblent concernés\n\n{items}\n",
         "minutes_pr_title": "Compte rendu : {title}",
         "minutes_pr_body": "Compte rendu de la réunion du {date}. Participants : {participants}.",
         "someone": "Quelqu'un",
