@@ -1,7 +1,15 @@
+import json
+
 import pytest
 
 from kb_meeting_agent.ports import PublishError
-from kb_meeting_agent.publish.local import DryRunPublisher, FakePublisher
+from kb_meeting_agent.publish.local import (
+    INDEX_ROWS_FILE,
+    DryRunPublisher,
+    FakePublisher,
+    KeptChange,
+    LocalKeeper,
+)
 
 
 async def test_dry_run_writes_files_and_description(tmp_path):
@@ -44,3 +52,38 @@ async def test_dry_run_can_hide_local_paths(tmp_path):
     pr = await publisher.open_pr("decision/x", {"a.md": "v1"}, "T", "B")
     assert pr.url == "dry run: decision/x"
     assert str(tmp_path) not in pr.url
+
+
+async def test_local_keeper_writes_the_change_and_its_index_rows(tmp_path):
+    keeper = LocalKeeper(tmp_path / "unpublished")
+    await keeper.keep(
+        "decision/x",
+        {"decisions/0003-x.md": "content"},
+        "T",
+        "Body",
+        {"decisions/README.md": "| 3 |"},
+    )
+    root = tmp_path / "unpublished" / "decision/x"
+    assert (root / "decisions/0003-x.md").read_text(encoding="utf-8") == "content"
+    assert (root / "PR.md").read_text(encoding="utf-8") == "# T\n\nBody"
+    assert json.loads((root / INDEX_ROWS_FILE).read_text(encoding="utf-8")) == {
+        "decisions/README.md": "| 3 |"
+    }
+
+
+async def test_local_keeper_writes_no_index_rows_file_when_there_are_none(tmp_path):
+    keeper = LocalKeeper(tmp_path)
+    await keeper.keep("b", {"a.md": "x"}, "T", "B", {})
+    assert not (tmp_path / "b" / INDEX_ROWS_FILE).exists()
+
+
+async def test_local_keeper_reads_back_what_it_kept_and_discards_it(tmp_path):
+    keeper = LocalKeeper.of_meeting(tmp_path)
+    await keeper.keep("decision/x", {"d/0003-x.md": "c"}, "T", "Body\n\nMore", {"d/README.md": "|"})
+    await keeper.keep("minutes/y", {"m/y.md": "m"}, "M", "B", {})
+    assert list(keeper.kept()) == [
+        KeptChange("decision/x", {"d/0003-x.md": "c"}, "T", "Body\n\nMore", {"d/README.md": "|"}),
+        KeptChange("minutes/y", {"m/y.md": "m"}, "M", "B", {}),
+    ]
+    keeper.discard("decision/x")
+    assert [change.branch for change in keeper.kept()] == ["minutes/y"]

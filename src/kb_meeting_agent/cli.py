@@ -12,8 +12,8 @@ from kb_meeting_agent.config import load_config
 from kb_meeting_agent.kb.project import build_sources
 from kb_meeting_agent.llm.factory import build_provider
 from kb_meeting_agent.ports import OutMessage, Publisher
-from kb_meeting_agent.publish.github import GitHubPublisher
-from kb_meeting_agent.publish.local import DryRunPublisher
+from kb_meeting_agent.publish.factory import build_publisher
+from kb_meeting_agent.publish.local import DryRunPublisher, LocalKeeper
 
 
 class ConsoleSink:
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("--level", choices=["silent", "contradictions", "context"])
     replay.add_argument("--auto-validate", action="store_true", help="validate every decision")
     replay.add_argument("--publish", action="store_true", help="open real pull requests")
-    live = commands.add_parser("run", help="join Discord meetings")
+    live = commands.add_parser("run", help="join live meetings through the connector")
     live.add_argument("--config", type=Path, default=Path("config.yml"))
     index = commands.add_parser("index", help="sync and index every repository of a project")
     index.add_argument("--config", type=Path, default=Path("config.yml"))
@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    missing = [name for name in ("discord", "transcription") if getattr(config, name) is None]
+    missing = [name for name in ("connector", "transcription") if getattr(config, name) is None]
     if missing:
         print(f"run needs the {' and '.join(missing)} section(s) in {args.config}", file=sys.stderr)
         return 2
@@ -63,9 +63,13 @@ def _run(args: argparse.Namespace) -> int:
     )
     for noisy in ("httpx", "httpx2", "huggingface_hub"):  # one line per HTTP request otherwise
         logging.getLogger(noisy).setLevel(logging.WARNING)
-    from kb_meeting_agent.live.runner import run
+    from kb_meeting_agent.live.runner import ConnectorConfigError, run
 
-    asyncio.run(run(config))
+    try:
+        asyncio.run(run(config))
+    except ConnectorConfigError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     return 0
 
 
@@ -116,7 +120,7 @@ async def _replay(args: argparse.Namespace) -> int:
             print(f"{repo.name}: {exc} (answers rely on the other sources)", file=sys.stderr)
     publisher: Publisher
     if args.publish:
-        publisher = GitHubPublisher(kb_config.repo, kb_config.base_branch, kb_config.token)
+        publisher = build_publisher(kb_config)
     else:
         publisher = DryRunPublisher(args.out)
     transcript_path = args.out / "transcript.jsonl"
@@ -126,6 +130,7 @@ async def _replay(args: argparse.Namespace) -> int:
         fast=build_provider(config.llm.fast),
         strong=build_provider(config.llm.strong),
         publisher=publisher,
+        keeper=LocalKeeper.of_meeting(args.out),
         sink=ConsoleSink(),
         transcript=Transcript(transcript_path),
         settings=AgentSettings(
@@ -153,6 +158,5 @@ async def _replay(args: argparse.Namespace) -> int:
         await agent.end()
     finally:
         kb.close()
-        if isinstance(publisher, GitHubPublisher):
-            await publisher.aclose()
+        await publisher.aclose()
     return 0

@@ -11,7 +11,7 @@ from kb_meeting_agent.llm.base import LLMConfigError, LLMError, LLMUnavailable
 from kb_meeting_agent.llm.fake import FAKE_DEFAULTS, FakeProvider
 from kb_meeting_agent.models import Segment
 from kb_meeting_agent.ports import PublishError
-from kb_meeting_agent.publish.local import FakePublisher
+from kb_meeting_agent.publish.local import FakePublisher, LocalKeeper
 
 DECISION = {"statement": "Cooldown is 30 seconds", "quote": "ok on passe à 30"}
 DRAFT = {
@@ -69,6 +69,7 @@ def make_agent(kb, tmp_path):
             fast=fast,
             strong=strong,
             publisher=publisher,
+            keeper=LocalKeeper(tmp_path / "meeting" / "unpublished"),
             sink=sink,
             transcript=Transcript(tmp_path / "meeting" / "transcript.jsonl"),
             settings=AgentSettings(

@@ -3,10 +3,9 @@ import json
 
 from conftest import KB_FILES, commit_file, minutes_content
 
-from kb_meeting_agent.agent.decisions import INDEX_ROWS_FILE
 from kb_meeting_agent.llm.fake import FakeProvider
 from kb_meeting_agent.ports import PublishError
-from kb_meeting_agent.publish.local import FakePublisher
+from kb_meeting_agent.publish.local import INDEX_ROWS_FILE, FakePublisher
 from kb_meeting_agent.transcription.base import TranscriptionResult
 from kb_meeting_agent.transcription.fake import FakeTranscriber
 from live.helpers import command, speak
@@ -36,6 +35,7 @@ async def test_close_publishes_minutes_leaves_and_deletes_audio(make_session):
     state = json.loads((meeting.dir / "state.json").read_text(encoding="utf-8"))
     assert state["status"] == "closed"
     assert session.meeting is None
+    assert publisher.closed
 
 
 async def test_second_pass_feeds_the_minutes(make_session):
@@ -107,6 +107,24 @@ async def test_retry_publish_sends_kept_pull_requests(make_session):
     assert any(path.endswith("-weekly.md") for path in files)
     assert "https://example.test/pull/1" in link2.of("reply")[-1]["text"]
     assert not any((meeting_dir / "unpublished").rglob("PR.md"))
+    assert publisher.closed
+
+
+async def test_retry_publish_reports_once_when_closing_the_publisher_fails(make_session):
+    class UnclosablePublisher(FakePublisher):
+        async def aclose(self):
+            raise RuntimeError("connection reset")
+
+    failing, *_ = make_session(strong=FakeProvider(dict(MINUTES)), publisher=FailingPublisher())
+    await start(failing)
+    await speak(failing)
+    await failing.close()
+    working, link, _, publisher = make_session(publisher=UnclosablePublisher())
+    await working.on_event("message", command("meeting_retry_publish"))
+    assert len(publisher.prs) == 1
+    assert [r["text"] for r in link.of("reply")] == [
+        "Published 1 kept pull request(s): https://example.test/pull/1"
+    ]
 
 
 async def test_optout_survives_a_resume_and_deletes_the_speakers_audio(make_session):
@@ -311,3 +329,18 @@ async def test_retry_publish_skips_a_decision_whose_number_is_now_taken(make_ses
     assert publisher.prs == []
     assert "decision number 0003 is now used" in link.of("reply")[-1]["text"]
     assert any(kept.rglob("PR.md"))
+
+
+async def test_optout_deletes_the_audio_of_a_speaker_id_that_is_not_a_file_name(make_session):
+    session, *_ = make_session()
+    await start(session)
+    speaker = "spaces/abc/participants/7"  # a Meet participant
+    await speak(session, user="u1", name="Alice")
+    await speak(session, user=speaker, name="Bob", start=3_000)
+    await session.settle()
+    audio = session.meeting.dir / "audio"
+    assert len(list(audio.glob("*.wav"))) == 2
+    await session.on_event(
+        "message", command("meeting_optout", interaction="i2", user=(speaker, "Bob"))
+    )
+    assert [path.name for path in audio.glob("*.wav")] == ["00000-u1.wav"]

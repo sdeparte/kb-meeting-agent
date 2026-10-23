@@ -1,4 +1,4 @@
-// kb-meeting-agent Discord connector: translates Discord <-> protocol v1. No business logic.
+// kb-meeting-agent Discord connector: translates Discord <-> protocol v2. No business logic.
 import opus from "@discordjs/opus";
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel } from "@discordjs/voice";
 import {
@@ -16,12 +16,18 @@ import {
 
 import { COMMANDS, commandName, commandOptions } from "./commands.js";
 import { downsample48kStereoTo16kMono } from "./downsample.js";
-import { PROTOCOL_VERSION, encodeAudioFrame, message, parseMessage } from "./protocol.js";
+import { CONFIG_ERROR_EXIT, PROTOCOL_VERSION, encodeAudioFrame, message, parseMessage } from "./protocol.js";
 import { isLoggableVoiceDebug, truncate } from "./text.js";
 import { UtteranceTracker } from "./utterances.js";
 
 const { KBMA_CORE_URL, KBMA_SECRET, DISCORD_TOKEN, DISCORD_GUILD_ID } = process.env;
 const log = (...args) => console.error(new Date().toISOString(), ...args);
+
+const missing = ["DISCORD_TOKEN", "DISCORD_GUILD_ID"].filter((name) => !process.env[name]);
+if (missing.length) {
+  log(`${missing.join(" and ")} missing from connector.env`);
+  process.exit(CONFIG_ERROR_EXIT);
+}
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
 let core = null; // opened once logged in to Discord, so a join is never handled too early

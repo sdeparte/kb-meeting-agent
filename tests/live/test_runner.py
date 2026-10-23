@@ -3,8 +3,17 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 from kb_meeting_agent.config import AppConfig
-from kb_meeting_agent.live.runner import ConnectorProcess, connector_command, connector_env, run
+from kb_meeting_agent.live.protocol import CONFIG_ERROR_EXIT
+from kb_meeting_agent.live.runner import (
+    ConnectorConfigError,
+    ConnectorProcess,
+    connector_command,
+    connector_env,
+    run,
+)
 
 FAKE = Path(__file__).with_name("fake_connector.py")
 
@@ -28,7 +37,10 @@ def config(tmp_path, kb_origin=None):
                     }
                 }
             },
-            "discord": {"token": "discord-token", "guild_id": "1"},
+            "connector": {
+                "name": "discord",
+                "env": {"DISCORD_TOKEN": "discord-token", "DISCORD_GUILD_ID": "1"},
+            },
             "transcription": {
                 "live": {"provider": "fake", "model": "fake"},
                 "min_voiced_seconds": 0,
@@ -60,6 +72,27 @@ async def test_a_connector_that_cannot_start_is_retried(tmp_path, caplog):
     assert "connector could not be started" in caplog.text
 
 
+async def test_a_connector_refusing_its_configuration_is_not_restarted(tmp_path, caplog):
+    code = f"raise SystemExit({CONFIG_ERROR_EXIT})"
+    process = ConnectorProcess([sys.executable, "-c", code], dict(os.environ), backoff_initial=0.01)
+    await asyncio.wait_for(process.run(asyncio.Event()), 10)
+    assert process.runs == 1 and process.refused
+    assert "refused its configuration" in caplog.text
+
+
+async def test_run_stops_when_the_connector_refuses_its_configuration(tmp_path):
+    code = f"raise SystemExit({CONFIG_ERROR_EXIT})"
+    with pytest.raises(ConnectorConfigError):
+        await asyncio.wait_for(run(config(tmp_path), connector=[sys.executable, "-c", code]), 15)
+
+
+async def test_run_refuses_a_bundled_connector_that_does_not_exist(tmp_path):
+    cfg = config(tmp_path)
+    cfg.connector.name = "discrod"
+    with pytest.raises(ConnectorConfigError, match="connector-discrod"):
+        await run(cfg)
+
+
 def test_connector_command_and_minimal_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
     cfg = config(tmp_path)
@@ -69,6 +102,22 @@ def test_connector_command_and_minimal_env(tmp_path, monkeypatch):
     assert env["KBMA_CORE_URL"] == "ws://127.0.0.1:1" and env["DISCORD_TOKEN"] == "discord-token"
     assert env["DISCORD_GUILD_ID"] == "1"
     assert "ANTHROPIC_API_KEY" not in env
+
+
+def test_a_connector_can_be_any_command(tmp_path):
+    cfg = config(tmp_path)
+    cfg.connector.command = ["python", "-m", "my_meet_connector"]
+    assert connector_command(cfg) == ["python", "-m", "my_meet_connector"]
+    cfg.connector.command = None
+    cfg.connector.name = "meet"
+    assert connector_command(cfg)[1].endswith("connector-meet/src/index.js")
+    assert connector_env("ws://127.0.0.1:1", "s", cfg)["KBMA_SECRET"] == "s"
+
+
+def test_the_connector_env_cannot_override_the_link(tmp_path):
+    cfg = config(tmp_path)
+    cfg.connector.env["KBMA_CORE_URL"] = "ws://elsewhere"
+    assert connector_env("ws://127.0.0.1:1", "s", cfg)["KBMA_CORE_URL"] == "ws://127.0.0.1:1"
 
 
 async def test_run_accepts_the_connector(tmp_path):

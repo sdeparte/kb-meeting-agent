@@ -70,11 +70,12 @@ A repository is `KnowledgeBase` or `CodeBase`, never both. The configuration is 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `repo` | (required) | GitHub repository, `owner/name` |
+| `provider` | `github` | where the repository is hosted. Only `github` for now; a host is added in `forges.py` (clone URL, git auth, file links) plus a publisher in `publish/` |
+| `repo` | (required) | repository on that host, `owner/name` |
 | `tags` | (required) | see above |
 | `base_branch` | `main` | branch the agent reads (and, for the KB, opens pull requests against) |
 | `token` | none | GitHub token. KB: required for `--publish` and for a private KB, with Contents and Pull requests read and write. Code repository: Contents read only, for a private repository. |
-| `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to `https://github.com/` URLs. |
+| `clone_url` | `https://github.com/<repo>.git` | clone from another URL or a local path instead. The token is only sent to the host of `provider` (`https://github.com/`). |
 | `language` | `en` | `KnowledgeBase` only: language of the agent's messages, pull requests and generated documents when the KB's `.meeting-agent.yml` does not set `language` (the KB's own setting wins) |
 | `include` | all files | `CodeBase` only: glob patterns; when set, only matching files are indexed (`src/**`) |
 | `exclude` | none | `CodeBase` only: glob patterns of files not to index, on top of the defaults below |
@@ -106,26 +107,46 @@ Patterns match the whole path or the file name; `*` also matches `/`. Files are 
 | `transcription_lag_alert_seconds` | `30` | post a message when the transcription falls this far behind |
 | `transcript_retention_days` | `30` | meeting folders (audio, transcripts, state, kept files) are deleted once they have not been updated for this long, including meetings abandoned after a crash |
 
-## Discord and transcription
+## Connector and transcription
 
 Needed only by `kb-meeting-agent run`.
 
-### `discord`
+### `connector`
+
+The connector is the process that joins meetings on a platform and relays audio, commands and messages to the core over the local protocol (`live/protocol.py`). The core knows nothing of the platform: it runs the connector and passes it `env`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `token` | (required) | bot token |
-| `guild_id` | (required) | server the agent serves; slash commands are registered there |
-| `node` | `node` | Node.js 22.12+ executable |
-| `connector_dir` | `connector-discord/` of this checkout | where the connector lives |
+| `name` | (required) | the connector, e.g. `discord` (lowercase letters, digits, `-`) |
+| `env` | `{}` | environment of the connector: its credentials and settings. Use `${VAR}` for secrets |
+| `command` | `[<node>, <dir>/src/index.js]` | how to start the connector, for one that is not a bundled Node.js connector |
+| `node` | `node` | Node.js 22.12+ executable, for the default `command` (refused with `command`) |
+| `dir` | `connector-<name>/` of this checkout | where the connector lives, for the default `command` (refused with `command`) |
 
-The connector only receives the Discord token, the guild id and the local connection details, never model keys or the GitHub token.
+A connector that exits with code 78 refuses its `env` (`connector-discord` does when a variable below is missing): it is not restarted and `run` stops with an error. Any other exit is restarted with backoff.
+
+The connector receives `env`, `PATH`, `HOME`, the locale and temporary-folder variables, and the local connection details (`KBMA_CORE_URL`, `KBMA_SECRET`, which `env` cannot override): never model keys or repository tokens.
+
+`connector-discord` reads:
+
+| Variable | Meaning |
+|---|---|
+| `DISCORD_TOKEN` | bot token |
+| `DISCORD_GUILD_ID` | server the agent serves; slash commands are registered there |
+
+```yaml
+connector:
+  name: discord
+  env:
+    DISCORD_TOKEN: "${DISCORD_TOKEN}"
+    DISCORD_GUILD_ID: "123456789012345678"
+```
 
 ### `transcription`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `language` | auto-detected | language passed to Whisper (`fr`, `en`…) |
+| `language` | auto-detected | language passed to the engine (`fr`, `en`…) |
 | `workers` | `2` | utterances transcribed at the same time |
 | `live` | (required) | engine used during the meeting |
 | `final` | none | engine for the second pass at the end; the minutes are written from it |
@@ -135,10 +156,10 @@ The connector only receives the Discord token, the guild id and the local connec
 | `max_compression_ratio` | `2.4` | transcriptions that compress better than this are dropped: Whisper stuck in a loop ("Eik, Disa, Eik, Disa, …"). Speech, even repeating a phrase three times, stays under 2; `null` disables. Whisper uses the same threshold |
 | `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
 | `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
-| `vocabulary` | `[]` | terms hinted to Whisper before the glossary, e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
+| `vocabulary` | `[]` | terms hinted before the glossary to the engines that take a prompt (the three Whisper engines), e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
 | `vocabulary_max_chars` | `600` | length of the vocabulary hint: the agent's `agent.name` (not its aliases), then `vocabulary`, then the terms of the KB glossary's tables (first cells, then `code` spans), leaving out status tags, commit hashes and, among the `code` spans, code identifiers |
 
-Engine keys (`live`, `final`):
+Engine keys (`live`, `final`). A key that only some engines read is refused on the others, so that a setting never silently does nothing:
 
 | Key | Meaning |
 |---|---|
@@ -146,9 +167,9 @@ Engine keys (`live`, `final`):
 | `model` | model name or Hugging Face repository |
 | `base_url`, `api_key` | `openai-compatible` only |
 | `device`, `compute_type`, `beam_size` | `faster-whisper` only (`auto`, `int8`, `1`) |
-| `temperature_fallback` | `mlx-whisper` and `faster-whisper` only, refused elsewhere (default `true`): when the text loops or the model is unsure, decode the utterance again at higher temperatures, up to 6 times. Set `false` on `live`: these retries are mostly on noise that is dropped anyway, and they hold up the utterances behind them (on recorded meetings: half of the GPU time, up to 8 s for one utterance, for 2 utterances in 100 rescued). Keep it on `final`, which has the time |
+| `temperature_fallback` | `mlx-whisper` and `faster-whisper` only (default `true`): when the text loops or the model is unsure, decode the utterance again at higher temperatures, up to 6 times. Set `false` on `live`: these retries are mostly on noise that is dropped anyway, and they hold up the utterances behind them (on recorded meetings: half of the GPU time, up to 8 s for one utterance, for 2 utterances in 100 rescued). Keep it on `final`, which has the time |
 
-Without a GitHub `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
+Without a `token` for the KB, `run` writes what it would publish under `<data_dir>/dry-run/`, and the channel shows these pull requests as `dry run: <branch>` (local paths are never posted).
 
 ## KB conventions (`.meeting-agent.yml`)
 
