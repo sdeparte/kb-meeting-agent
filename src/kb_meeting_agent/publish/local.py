@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
 
 from kb_meeting_agent.ports import BranchChangedError, PrRef, PublishError
+
+log = logging.getLogger(__name__)
+
+INDEX_ROWS_FILE = "INDEX_ROWS.json"  # next to PR.md in a change kept locally
 
 
 class DryRunPublisher:
@@ -47,6 +53,29 @@ class DryRunPublisher:
 
     async def open_pr_paths(self, prefix: str) -> list[str]:
         return []
+
+
+class LocalKeeper:
+    """Keeps changes under directory/<branch>/ as DryRunPublisher writes them, plus the index
+    rows they add, from which a later publication rebuilds the index on its own base."""
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+
+    async def keep(
+        self,
+        branch: str,
+        files: dict[str, str],
+        title: str,
+        body: str,
+        index_rows: dict[str, str],
+    ) -> None:
+        await DryRunPublisher(self._directory).open_pr(branch, files, title, body)
+        if index_rows:
+            (self._directory / branch / INDEX_ROWS_FILE).write_text(
+                json.dumps(index_rows, ensure_ascii=False), encoding="utf-8"
+            )
+        log.warning("kept %s locally in %s", branch, self._directory)
 
 
 class FakePublisher:
