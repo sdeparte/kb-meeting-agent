@@ -591,14 +591,19 @@ class MeetingSession:
             return
         _, kb_config = project_config.knowledge_base
         publisher = self.deps.make_publisher(kb_config)
-        # The kept files were built on the KB of the meeting day: index rows are rebuilt on
-        # today's base, and a decision number taken since is not published.
-        kb = self.deps.make_sources(state["project"], project_config)
         try:
-            await self._republish_kept(msg, directory, kb, publisher)
+            # The kept files were built on the KB of the meeting day: index rows are rebuilt
+            # on today's base, and a decision number taken since is not published.
+            kb = self.deps.make_sources(state["project"], project_config)
+            try:
+                await self._republish_kept(msg, directory, kb, publisher)
+            finally:
+                kb.close()
         finally:
-            kb.close()
-            await publisher.aclose()
+            try:
+                await publisher.aclose()
+            except Exception:  # the result is already posted: a second reply would contradict it
+                log.exception("closing the publisher failed")
 
     async def _republish_kept(
         self, msg: dict[str, Any], directory: Path, kb: ProjectSources, publisher: Publisher
