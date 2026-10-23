@@ -87,3 +87,33 @@ async def test_the_kb_weighs_more_than_code_and_a_preferred_tag_more_than_the_re
     assert [h.repo for h in hits] == ["kb", "back", "front", "kb", "kb", "back"]
     hits = await sources.search("q", k=6, prefer_tags=("BackEnd",))
     assert [h.repo for h in hits] == ["kb", "back", "front", "kb", "back", "kb"]
+
+
+def test_code_links_only_for_repositories_on_github(tmp_path):
+    from kb_meeting_agent.config import ProjectConfig
+    from kb_meeting_agent.kb.project import build_sources
+    from kb_meeting_agent.llm.fake import FakeProvider
+
+    project = ProjectConfig.model_validate(
+        {
+            "repos": {
+                "kb": {"repo": "acme/kb", "tags": ["KnowledgeBase"]},
+                "back": {"repo": "acme/back", "tags": ["CodeBase"]},
+                "front": {
+                    "repo": "acme/front",
+                    "tags": ["CodeBase"],
+                    "clone_url": "https://gitlab.example.com/acme/front.git",
+                },
+                "mirror": {
+                    "repo": "acme/mirror",
+                    "tags": ["CodeBase"],
+                    "clone_url": "https://github.com/acme/mirror.git",
+                },
+            }
+        }
+    )
+    sources = build_sources("p", project, tmp_path, FakeProvider().embed, "fake")
+    assert sources.link_file("back", "a.py") == "https://github.com/acme/back/blob/main/a.py"
+    assert sources.link_file("mirror", "a.py").startswith("https://github.com/acme/mirror/")
+    assert sources.link_file("front", "a.py") is None
+    sources.close()
