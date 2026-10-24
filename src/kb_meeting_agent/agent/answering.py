@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import create_model
@@ -135,12 +136,16 @@ def _with_sections(kb: KnowledgeBase, chunks: list[Chunk]) -> list[Chunk]:
     """Each chunk with the other chunks of its section, when the section was split: a table
     cut in parts is then read whole, where a question listing its rows would see only some.
     The search results are always kept; sections are added while the excerpts fit in
-    EXCERPTS_MAX_CHARS, past which a local model's context would silently drop the prompt's start."""
+    EXCERPTS_MAX_CHARS, past which a local model's context would silently drop the prompt's start.
+    Sections the KB lists in `unexpanded_sections` (say, galleries of rendered screens) are not
+    added: their image links weigh in the prompt without telling the model anything."""
+    unexpanded = [re.compile(pattern) for pattern in kb.conventions.unexpanded_sections]
     result: list[Chunk] = []
     seen: set[tuple[str, str]] = set()
     total = 0
     for i, chunk in enumerate(chunks):
-        pieces = kb.section(chunk)
+        heading = chunk.headings[-1] if chunk.headings else ""
+        pieces = [] if any(p.search(heading) for p in unexpanded) else kb.section(chunk)
         if chunk not in pieces or sum(len(piece.text) for piece in pieces) > SECTION_MAX_CHARS:
             pieces = [chunk]
         new = [piece for piece in pieces if (piece.anchor, piece.text) not in seen]
