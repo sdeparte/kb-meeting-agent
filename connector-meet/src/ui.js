@@ -9,14 +9,20 @@ export const SELECTORS = {
   joinNow: /^(join now|participer)/i,
   askToJoin: /^(ask to join|demander à participer)/i,
   leaveCall: /^(leave call|quitter l'appel)/i,
+  // The lobby already shows the leave button: this text tells it from the call.
+  lobby: /(please wait until a meeting host brings you into the call|veuillez patienter jusqu'à ce qu'un organisateur)/i,
   refused: /(you can't join this call|someone in the call denied|vous ne pouvez pas participer|a refusé votre demande)/i,
   ended: /(you left the meeting|the call has ended|you've been removed|vous avez quitté la réunion|l'appel est terminé|vous avez été exclu)/i,
   openChat: /^(chat with everyone|discuter avec tous les participants)/i,
   people: /(show everyone|afficher tous les participants|people|participants)/i,
   chatInput: /^(send a message|envoyer un message)/i,
   tile: "[data-participant-id]",
-  tileName: "[data-self-name], [jsname] span",
-  speakingClass: /speaking|audio-active|is-active-speaker/i,
+  tileName: "[data-self-name], span.notranslate",
+  // Meet's class names are obfuscated. Seen on 2026-10-23: while someone speaks, BlxGDf is on
+  // their tile and the level indicator ([jsname=QgSmzd]) loses gjg47c; silent, the reverse.
+  speakingClass: /\bBlxGDf\b/,
+  // Only the agent's own tile offers these; it has no data-self-name nor "(you)" any more.
+  selfControls: /^(backgrounds and effects|reframe|arrière-plans et effets|recadrer)/i,
   message: "[data-message-id]",
   messageSender: "[data-sender-name]",
   selfNames: ["you", "vous"],
@@ -55,7 +61,8 @@ export async function admitted(page) {
 }
 
 export async function inMeeting(page) {
-  return (await page.getByRole("button", { name: SELECTORS.leaveCall }).count()) > 0;
+  if ((await page.getByRole("button", { name: SELECTORS.leaveCall }).count()) === 0) return false;
+  return !(await page.getByText(SELECTORS.lobby).first().isVisible().catch(() => false));
 }
 
 export async function ended(page) {
@@ -81,18 +88,26 @@ export async function leave(page) {
 // Participants from the video tiles: Meet's participant id when it has one, else the name.
 export async function participants(page) {
   return page.locator(SELECTORS.tile).evaluateAll(
-    (tiles, { nameSelector, selfNames }) => {
+    (tiles, { nameSelector, selfNames, controls }) => {
+      const selfControl = new RegExp(controls.source, controls.flags);
       const seen = new Map();
       for (const tile of tiles) {
         const name = (tile.querySelector(nameSelector)?.textContent ?? "").trim();
         const id = tile.getAttribute("data-participant-id") || name;
         if (!id || seen.has(id)) continue;
-        const self = tile.hasAttribute("data-self-name") || selfNames.some((s) => name.toLowerCase().endsWith(`(${s})`));
+        const self =
+          tile.hasAttribute("data-self-name") ||
+          selfNames.some((s) => name.toLowerCase().endsWith(`(${s})`)) ||
+          [...tile.querySelectorAll("[aria-label]")].some((el) => selfControl.test(el.getAttribute("aria-label")));
         seen.set(id, { id, name: name.replace(/\s*\((you|vous)\)$/i, ""), self });
       }
       return [...seen.values()];
     },
-    { nameSelector: SELECTORS.tileName, selfNames: SELECTORS.selfNames },
+    {
+      nameSelector: SELECTORS.tileName,
+      selfNames: SELECTORS.selfNames,
+      controls: { source: SELECTORS.selfControls.source, flags: SELECTORS.selfControls.flags },
+    },
   );
 }
 
