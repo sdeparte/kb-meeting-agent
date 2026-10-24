@@ -47,7 +47,7 @@ When the glossary maps a name to a technical identifier, include both.
 GLOSSARY:
 {glossary}"""
 
-CODE_HINT = """Set "code" to true only when the question is about the source code itself: which code handles something, how something is implemented, what the code does. Otherwise set it to false: the knowledge base alone is searched."""
+CODE_HINT = """Set "code" to true only when the question is about the source code itself: which file, class, function, controller or widget handles something, where something is coded or implemented, how the code does it. A question about a value, a rule or how the game behaves is not about the code, even when it names the server or the app. Otherwise set it to false: the knowledge base alone is searched."""
 NO_CODE_HINT = """Set "code" to false."""
 TAGS_HINT = """When "code" is true, also list in "tags" the parts of the project the question is about, among: {tags}. Leave it empty otherwise, or when the question points at none."""
 NO_TAGS_HINT = """Leave "tags" empty."""
