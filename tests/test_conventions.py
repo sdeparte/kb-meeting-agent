@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from kb_meeting_agent.conventions import (
     CONVENTIONS_FILE,
     DecisionConventions,
+    KbConventions,
     load_conventions,
     load_template,
     render_template,
@@ -52,6 +53,12 @@ def test_scopes_must_differ_by_more_than_case_accents_or_spacing():
     assert DecisionConventions(scopes=["клиент", "сервер", "les deux"]).scopes[0] == "клиент"
     with pytest.raises(ValidationError, match="differ only by"):
         DecisionConventions(scopes=["Serveur", "sérveur"])
+
+
+def test_unexpanded_sections_must_be_regular_expressions():
+    assert KbConventions(unexpanded_sections=["^Mockup"]).unexpanded_sections == ["^Mockup"]
+    with pytest.raises(ValidationError):
+        KbConventions(unexpanded_sections=["(unclosed"])
 
 
 def test_render_template_formats_known_keys_and_keeps_the_rest():
