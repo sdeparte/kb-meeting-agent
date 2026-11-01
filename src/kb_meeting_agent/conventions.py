@@ -78,11 +78,22 @@ class KbConventions(_Strict):
     instructions: list[str] = Field(default_factory=list)
     exclude: list[str] = Field(default_factory=list)
     authoritative: list[str] = Field(default_factory=list)
+    unexpanded_sections: list[str] = Field(default_factory=list)
     glossary: str | None = None
     page_header: PageHeader = Field(default_factory=PageHeader)
     statuses: list[StatusRule] = Field(default_factory=list)
     decisions: DecisionConventions = Field(default_factory=DecisionConventions)
     minutes: MinutesConventions = Field(default_factory=MinutesConventions)
+
+    @field_validator("unexpanded_sections")
+    @classmethod
+    def _valid_patterns(cls, patterns: list[str]) -> list[str]:
+        for pattern in patterns:
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                raise ValueError(f"{pattern!r} is not a regular expression: {error}") from error
+        return patterns
 
 
 def load_conventions(repo_dir: Path) -> KbConventions:

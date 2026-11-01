@@ -185,6 +185,7 @@ language: fr
 instructions: [CONTRIBUTING.md]
 exclude: [mockups/**, minutes/**]
 authoritative: [reference/configuration.md]
+unexpanded_sections: ['^Mockup']
 glossary: reference/glossary.md
 
 page_header:
@@ -225,6 +226,7 @@ minutes:
 | `instructions` | `[]` | files given to the model when it writes decision records and minutes, for example a contribution guide. Truncated to 12,000 characters in total. |
 | `exclude` | `[]` | glob patterns of Markdown files not to index (`*` also matches `/`) |
 | `authoritative` | `[]` | files ranked higher in search, for example the page that holds reference values |
+| `unexpanded_sections` | `[]` | regular expressions matched against section headings. When a search result is part of a longer section, the agent usually gives the model the whole section (a table split by the index is then read whole); a matching section is given as found. Use it for sections that weigh without informing, such as galleries of rendered screens: their image links and alt texts fill the excerpts of a small local model |
 | `glossary` | none | given to the model when it rewrites a question into search queries, to map names to identifiers (first 4,000 characters) |
 | `page_header.verified_date` | none | regular expression with one capture group matching a page's last verification date (`YYYY-MM-DD`). The matching line is not indexed. |
 | `statuses` | `[]` | status tags used in pages. `meaning` is one of `in_production`, `in_progress`, `planned`, `rejected`: a value under a planned item is not treated as the production value, and restating a rejected idea is flagged as already rejected. |

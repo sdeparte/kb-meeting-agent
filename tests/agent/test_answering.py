@@ -76,6 +76,12 @@ async def test_a_section_is_not_added_past_the_excerpts_budget(kb, kb_origin, mo
     assert "GAME-01" in excerpts and "GAME-40" not in excerpts
 
 
+async def test_an_unexpanded_section_is_read_as_found(kb, kb_origin, monkeypatch):
+    commit_file(kb_origin, ".meeting-agent.yml", "unexpanded_sections: ['^Mini']\n")
+    excerpts = await excerpts_for_the_first_part_of_a_split_table(kb, kb_origin, monkeypatch)
+    assert "GAME-01" in excerpts and "GAME-40" not in excerpts
+
+
 async def test_code_is_searched_only_when_the_question_asks_about_it(sources):
     for code in (False, True):
         fast = FakeProvider(
