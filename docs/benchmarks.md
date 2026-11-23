@@ -30,7 +30,41 @@ Knowledge base of 2026-11-23. The roles are measured separately: `strong` (write
 
 ### `strong`
 
-_In progress._
+| `strong` | Score /87 | % | Mean time | Median | 90th percentile | Errors |
+|---|---|---|---|---|---|---|
+| qwen3:8b | 59.87 | 69 % | 32.3 s | 32.8 s | 47.6 s | 0 |
+
+| Category | qwen3:8b |
+|---|---|
+| Lists | 6.9/15 |
+| Reference values | 14.0/24 |
+| Decisions and statuses | 13.0/15 |
+| Vocabulary and organisation | 9.0/9 |
+| Mockups | 9.0/9 |
+| Code | 5.0/12 |
+| Out of the KB | 3.0/3 |
+
+```mermaid
+xychart-beta
+  title "Score out of 87"
+  x-axis ["qwen3:8b"]
+  y-axis "Score" 0 --> 87
+  bar [59.9]
+```
+
+```mermaid
+xychart-beta
+  title "Mean time per answer (s)"
+  x-axis ["qwen3:8b"]
+  y-axis "Seconds" 0 --> 52
+  bar [32.3]
+```
+
+`fast` is `qwen3:8b` without thinking in every row; `+ thinking` is `reasoning_effort: "medium"` on `strong`.
+
+The baseline is lower than October's (69 % against 90 %): the knowledge base grew harder, not the agent worse. Lists now have 17 rows (the roadmap section is past `SECTION_MAX_CHARS`, so only its first chunk is read), and two default values became per-level tables, which `qwen3:8b` answers with an invented single value.
+
+_Still to run: qwen3:8b + thinking, qwen3.5:9b, qwen3.5:9b + thinking, gemma4:12b-it-qat, qwen3:14b._
 
 ### Memory
 
