@@ -130,7 +130,18 @@ What a 16 GB meeting can run: one model in both roles, or two that stay loaded t
 
 On 16 GB, a meeting holds the language model, `bge-m3`, the transcription model and, for Meet and Slack, Chromium. `fast` and `strong` are best served by the same model: two different ones are unloaded and reloaded in turn.
 
-_In progress._
+Measured with `ollama ps` once a minute during the runs (model and its 16k-token context, on the GPU):
+
+| Model | Resident |
+|---|---|
+| `bge-m3` | 0.7 GB |
+| `qwen3.5:4b-q4_K_M` | 3.4 GB |
+| `qwen3.5:9b-q4_K_M` | 5.1 GB |
+| `qwen3:8b` | 5.8 GB |
+| `gemma4:12b-it-qat` | 7.4 GB |
+| `qwen3:14b` | 9.8 GB |
+
+`qwen3.5:9b` takes less memory than `qwen3:8b`, the model it replaces.
 
 ## 2026-10 — Excerpts and query rewriting
 
