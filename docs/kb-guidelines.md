@@ -37,8 +37,9 @@ To apply them to your own KB, see [Apply with Claude Code](#apply-with-claude-co
 ### What the agent should not read
 
 13. **Move dated reports (audits, retrospectives, meeting notes) to a folder listed in `exclude`.** They describe a past state without saying it is past. Excluding them is also what [`exclude`](configuration.md#general) is for.
-14. **Put mockup galleries under a heading matched by `unexpanded_sections`** (for example `## Mockup`). Their image links and alt texts fill the excerpts without informing; matched sections are read as found.
-15. **Keep the glossary short and current, and point `glossary` to it.** The query-rewriting model reads its first 4,000 characters to map spoken names to identifiers.
+14. **Exclude the files written for contributors** (`CLAUDE.md`, `CONTRIBUTING.md`, `AGENTS.md`…). They are indexed like any page unless listed in `exclude`, and writing rules quote the wrong answers they guard against. The agent still reads them for decision records and minutes through `instructions`, which does not depend on the index.
+15. **Put mockup galleries under a heading matched by `unexpanded_sections`** (for example `## Mockup`). Their image links and alt texts fill the excerpts without informing; matched sections are read as found.
+16. **Keep the glossary short and current, and point `glossary` to it.** The query-rewriting model reads its first 4,000 characters to map spoken names to identifiers.
 
 ## Apply with Claude Code
 
