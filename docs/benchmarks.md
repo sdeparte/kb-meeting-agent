@@ -78,7 +78,7 @@ Thinking on `strong` is the largest gain so far, at twice the time: a minute per
 
 `qwen3.5:9b-q4_K_M` without thinking comes second, ahead of `qwen3:8b` with thinking.
 
-_Still to run: qwen3.5:9b-q4_K_M + thinking._
+`qwen3.5:9b-q4_K_M` with thinking was stopped after 4 questions: 4 to 16 minutes per answer (and 294 s on a one-line smoke test), with no better answers. It thinks without end; not usable in a meeting.
 
 ### Memory
 
