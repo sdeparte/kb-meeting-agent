@@ -109,6 +109,8 @@ uv run kb-meeting-agent index --project my-project
 
 Add a `.meeting-agent.yml` at the root of the KB repository to tell the agent its language, which files to skip, how decision records are named and numbered, where minutes go, and which status tags the pages use. Without it, the agent uses English and generic defaults. See [docs/configuration.md](docs/configuration.md#kb-conventions-meeting-agentyml).
 
+How the agent reads a KB, and how to write one it answers from well (with a prompt to audit yours with Claude Code): [docs/kb-guidelines.md](docs/kb-guidelines.md).
+
 ## Replay a meeting
 
 ```bash

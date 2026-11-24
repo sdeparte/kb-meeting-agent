@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A meeting agent that listens to a voice meeting (through a platform connector — Discord today — or a replayed JSONL transcript) and works against a **project**: one Git-hosted Markdown knowledge base (tag `KnowledgeBase`) plus optional read-only code repositories (tag `CodeBase` + free tags like `FrontEnd`/`BackEnd`). It answers questions, flags contradictions with the KB (quoting the KB line verbatim), turns validated decisions into one PR each, and opens a minutes PR at the end. User-facing docs: `README.md`, `docs/configuration.md` (every config key, and the per-KB `.meeting-agent.yml` conventions), `docs/manual-test.md` (live Discord checklist to run before merging changes to the connector, the session or transcription).
+A meeting agent that listens to a voice meeting (through a platform connector — Discord today — or a replayed JSONL transcript) and works against a **project**: one Git-hosted Markdown knowledge base (tag `KnowledgeBase`) plus optional read-only code repositories (tag `CodeBase` + free tags like `FrontEnd`/`BackEnd`). It answers questions, flags contradictions with the KB (quoting the KB line verbatim), turns validated decisions into one PR each, and opens a minutes PR at the end. User-facing docs: `README.md`, `docs/configuration.md` (every config key, and the per-KB `.meeting-agent.yml` conventions), `docs/manual-test.md` (live Discord checklist to run before merging changes to the connector, the session or transcription), `docs/kb-guidelines.md` (how the agent reads a KB and the writing rules that follow; update it when chunking, search or excerpt selection change).
 
 ## Commands
 
