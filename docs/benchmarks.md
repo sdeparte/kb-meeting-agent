@@ -35,31 +35,32 @@ Knowledge base of 2026-11-23. The roles are measured separately: `strong` (write
 | qwen3:8b | 59.87 | 69 % | 32.3 s | 32.8 s | 47.6 s | 0 |
 | qwen3:8b + thinking | 67.22 | 77 % | 67.8 s | 57.6 s | 85.8 s | 0 |
 | gemma4:12b-it-qat | 70.51 | 81 % | 63.2 s | 63.3 s | 81.4 s | 0 |
+| qwen3:14b | 65.63 | 75 % | 79.6 s | 81.6 s | 105.6 s | 0 |
 
-| Category | qwen3:8b | qwen3:8b + thinking | gemma4:12b-it-qat |
-|---|---|---|---|
-| Lists | 6.9/15 | 8.2/15 | 10.5/15 |
-| Reference values | 14.0/24 | 16.0/24 | 16.0/24 |
-| Decisions and statuses | 13.0/15 | 14.0/15 | 14.0/15 |
-| Vocabulary and organisation | 9.0/9 | 9.0/9 | 9.0/9 |
-| Mockups | 9.0/9 | 9.0/9 | 9.0/9 |
-| Code | 5.0/12 | 8.0/12 | 9.0/12 |
-| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 |
+| Category | qwen3:8b | qwen3:8b + thinking | gemma4:12b-it-qat | qwen3:14b |
+|---|---|---|---|---|
+| Lists | 6.9/15 | 8.2/15 | 10.5/15 | 7.6/15 |
+| Reference values | 14.0/24 | 16.0/24 | 16.0/24 | 17.0/24 |
+| Decisions and statuses | 13.0/15 | 14.0/15 | 14.0/15 | 13.0/15 |
+| Vocabulary and organisation | 9.0/9 | 9.0/9 | 9.0/9 | 9.0/9 |
+| Mockups | 9.0/9 | 9.0/9 | 9.0/9 | 9.0/9 |
+| Code | 5.0/12 | 8.0/12 | 9.0/12 | 7.0/12 |
+| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 | 3.0/3 |
 
 ```mermaid
 xychart-beta
   title "Score out of 87"
-  x-axis ["qwen3:8b", "qwen3:8b + thinking", "gemma4:12b-it-qat"]
+  x-axis ["qwen3:8b", "qwen3:8b + thinking", "gemma4:12b-it-qat", "qwen3:14b"]
   y-axis "Score" 0 --> 87
-  bar [59.9, 67.2, 70.5]
+  bar [59.9, 67.2, 70.5, 65.6]
 ```
 
 ```mermaid
 xychart-beta
   title "Mean time per answer (s)"
-  x-axis ["qwen3:8b", "qwen3:8b + thinking", "gemma4:12b-it-qat"]
-  y-axis "Seconds" 0 --> 90
-  bar [32.3, 67.8, 63.2]
+  x-axis ["qwen3:8b", "qwen3:8b + thinking", "gemma4:12b-it-qat", "qwen3:14b"]
+  y-axis "Seconds" 0 --> 110
+  bar [32.3, 67.8, 63.2, 79.6]
 ```
 
 `fast` is `qwen3:8b` without thinking in every row; `+ thinking` is `reasoning_effort: "medium"` on `strong`.
@@ -72,7 +73,9 @@ Thinking on `strong` is the largest gain so far, at twice the time: a minute per
 
 `gemma4:12b-it-qat` scores best so far, without thinking, and most of its lead is on lists and code. Its time here is not its own: `fast` (`qwen3:8b`) and `strong` (`gemma4`) do not fit in memory together, so Ollama reloads one model per call. Its real time is measured with `gemma4` in both roles.
 
-_Still to run: qwen3.5:9b-q4_K_M, qwen3.5:9b-q4_K_M + thinking, qwen3:14b._
+`qwen3:14b`, measured as a ceiling (it does not fit in a 16 GB meeting), scores below `gemma4:12b`: size alone is not the lever.
+
+_Still to run: qwen3.5:9b-q4_K_M, qwen3.5:9b-q4_K_M + thinking._
 
 ### Memory
 
