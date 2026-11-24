@@ -143,6 +143,37 @@ Measured with `ollama ps` once a minute during the runs (model and its 16k-token
 
 `qwen3.5:9b` takes less memory than `qwen3:8b`, the model it replaces.
 
+## 2026-11 — Lists
+
+qwen3.5:9b in both roles, bge-m3. Long lists (mini-games in production, player states, item types) were the weakest category. The catalogue a list question needed was never in the excerpts: neither its heading ("catalogue of types") nor its rows (a status tag) used a word of the question. The KB was then fixed by following [kb-guidelines.md](kb-guidelines.md): a catalogue page of its own, whose heading names what it lists; one place for each count; a sentence where no single default exists. The agent was not changed.
+
+| Pass | Score /87 | % | Mean time | Answer in the excerpts |
+|---|---|---|---|---|
+| Before the KB fixes | 69.64 | 80 % | 41.3 s | 78.6/84 |
+| After the KB fixes | **74.61** | **86 %** | 41.2 s | 81.0/84 |
+| After, plus at most 3 search results per page | 72.89 | 84 % | 41.5 s | 81.0/84 |
+
+| Category | Before | After | After, 3 per page |
+|---|---|---|---|
+| Lists | 7.6/15 | **13.6/15** | 12.9/15 |
+| Reference values | 21.0/24 | 20.0/24 | 20.0/24 |
+| Decisions and statuses | 14.0/15 | 14.0/15 | 13.0/15 |
+| Vocabulary and organisation | 8.0/9 | 8.0/9 | 8.0/9 |
+| Mockups | 7.0/9 | 7.0/9 | 7.0/9 |
+| Code | 9.0/12 | 9.0/12 | 9.0/12 |
+| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 |
+
+```mermaid
+xychart-beta
+  title "Lists, score out of 15"
+  x-axis ["Before the KB fixes", "After", "After, 3 per page"]
+  y-axis "Score" 0 --> 15
+  bar [7.6, 13.6, 12.9]
+```
+
+- **The KB fixes nearly doubled the list score** (+6 points on 15 questions), without changing any other category by more than one answer.
+- **Capping a page at 3 search results is not kept.** It only reorders the excerpts: section expansion adds the capped chunks back, since they belong to the same section, so the model read the same text in another order. Two answers changed, both for the worse. A page that floods the excerpts is better split into sections (rule 10 of the guidelines) than capped by the agent.
+
 ## 2026-11 — Embeddings
 
 | Embedding | Score /87 | % | Mean time | Median | 90th percentile | Errors |
