@@ -80,6 +80,46 @@ Thinking on `strong` is the largest gain so far, at twice the time: a minute per
 
 `qwen3.5:9b-q4_K_M` with thinking was stopped after 4 questions: 4 to 16 minutes per answer (and 294 s on a one-line smoke test), with no better answers. It thinks without end; not usable in a meeting.
 
+### Deployable configurations
+
+| `fast` / `strong` | Score /87 | % | Mean time | Median | 90th percentile | Errors |
+|---|---|---|---|---|---|---|
+| qwen3:8b / qwen3:8b | 59.87 | 69 % | 32.3 s | 32.8 s | 47.6 s | 0 |
+| qwen3:8b / qwen3:8b + thinking | 67.22 | 77 % | 67.8 s | 57.6 s | 85.8 s | 0 |
+| gemma4:12b / gemma4:12b | 65.62 | 75 % | 61.1 s | 62.6 s | 77.0 s | 0 |
+
+| Category | qwen3:8b / qwen3:8b | qwen3:8b / qwen3:8b + thinking | gemma4:12b / gemma4:12b |
+|---|---|---|---|
+| Lists | 6.9/15 | 8.2/15 | 8.6/15 |
+| Reference values | 14.0/24 | 16.0/24 | 17.0/24 |
+| Decisions and statuses | 13.0/15 | 14.0/15 | 12.0/15 |
+| Vocabulary and organisation | 9.0/9 | 9.0/9 | 9.0/9 |
+| Mockups | 9.0/9 | 9.0/9 | 9.0/9 |
+| Code | 5.0/12 | 8.0/12 | 7.0/12 |
+| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 |
+
+```mermaid
+xychart-beta
+  title "Score out of 87"
+  x-axis ["qwen3:8b / qwen3:8b", "qwen3:8b / qwen3:8b + thinking", "gemma4:12b / gemma4:12b"]
+  y-axis "Score" 0 --> 87
+  bar [59.9, 67.2, 65.6]
+```
+
+```mermaid
+xychart-beta
+  title "Mean time per answer (s)"
+  x-axis ["qwen3:8b / qwen3:8b", "qwen3:8b / qwen3:8b + thinking", "gemma4:12b / gemma4:12b"]
+  y-axis "Seconds" 0 --> 90
+  bar [32.3, 67.8, 61.1]
+```
+
+What a 16 GB meeting can run: one model in both roles, or two that stay loaded together. Times here are real (no model reloaded between calls); the two `qwen3:8b` rows are the step-1 passes, which already ran one model.
+
+`gemma4:12b` alone answers in about a minute, twice `qwen3:8b`'s time, and loses 5 points against `gemma4` with `qwen3:8b` rewriting the queries: it is the better writer, not the better query rewriter.
+
+_Still to run: qwen3.5:9b / qwen3.5:9b, qwen3.5:4b / gemma4:12b._
+
 ### Memory
 
 On 16 GB, a meeting holds the language model, `bge-m3`, the transcription model and, for Meet and Slack, Chromium. `fast` and `strong` are best served by the same model: two different ones are unloaded and reloaded in turn.
