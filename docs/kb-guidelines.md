@@ -7,7 +7,7 @@ To apply them to your own KB, see [Apply with Claude Code](#apply-with-claude-co
 ## How the agent reads a KB
 
 - Every Markdown page not excluded by `exclude` is cut into chunks of about 1,500 characters along its headings. A table cut in parts keeps its header row in each part.
-- A question is rewritten into up to 3 search queries. Each one searches by keywords (the chunk's text only: not its page path, not its headings) and by meaning (the page path, the headings and the text), and the two rankings are merged. Pages listed in `authoritative` rank higher.
+- A question is rewritten into up to 3 search queries. Each one searches by keywords and by meaning, both over the chunk's page path, headings and text, and the two rankings are merged. Keyword search matches any word of the query, so words common in the KB ("list", "what") weigh little and the words naming the subject decide. Pages listed in `authoritative` rank higher.
 - The 10 best chunks are given to the model. When a chunk is part of a longer section, the whole section is given instead, if it is under 6,000 characters and the excerpts stay under 30,000 characters; otherwise only the chunk. Sections matching `unexpanded_sections` are always given as found.
 - The model answers from these excerpts alone. It sees each excerpt's page, headings, status and verification date.
 
@@ -24,7 +24,7 @@ To apply them to your own KB, see [Apply with Claude Code](#apply-with-claude-co
 ### Lists
 
 6. **Give every list someone may ask for in a meeting a compact table: name, status, a few short columns.** Details go in each item's page, not in the cells. Keep it under about 4,000 characters, so it is read whole. A 10,000-character roadmap table was read as its first 7 rows.
-7. **Put the words people say aloud in the table's heading or in the sentence before it.** Keyword search does not see page paths or headings: a catalogue whose rows say `[PROD]` and whose heading says "Catalogue of types" is not found for "which features are in production?". Write "The features in production, and the ones planned:" before the table.
+7. **Put the words people say aloud in the table's heading or in the sentence before it.** Rows that say only `[PROD]` and a heading that says "Catalogue of types" share no word with "which features are in production?": such a catalogue was never found, and the agent listed features from other pages. Write "The features in production, and the ones planned:" before the table, or name the page after it (`features/catalogue.md`).
 8. **Give the table its own small page or section, not the middle of a long page.** A list inside a 160 KB page competes with every other section of that page, and the page's other chunks crowd the excerpts.
 9. **Tag every row's status, with the tags declared in `statuses`.** The agent tells planned and rejected items from what is in production only through these tags.
 
