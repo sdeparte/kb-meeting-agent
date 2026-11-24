@@ -178,6 +178,8 @@ Without a `token` for the KB, `run` writes what it would publish under `<data_di
 
 ## KB conventions (`.meeting-agent.yml`)
 
+How the agent reads the KB these conventions describe, and the writing rules that keep its answers right: [kb-guidelines.md](kb-guidelines.md).
+
 Every key is optional. Example for a French KB with numbered decision records and an index table:
 
 ```yaml
