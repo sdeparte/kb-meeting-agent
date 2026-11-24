@@ -88,31 +88,32 @@ Thinking on `strong` is the largest gain so far, at twice the time: a minute per
 | qwen3:8b / qwen3:8b + thinking | 67.22 | 77 % | 67.8 s | 57.6 s | 85.8 s | 0 |
 | gemma4:12b / gemma4:12b | 65.62 | 75 % | 61.1 s | 62.6 s | 77.0 s | 0 |
 | qwen3.5:9b / qwen3.5:9b | 69.64 | 80 % | 41.8 s | 41.2 s | 53.3 s | 0 |
+| qwen3.5:4b / gemma4:12b | 71.31 | 82 % | 64.2 s | 64.5 s | 79.2 s | 0 |
 
-| Category | qwen3:8b / qwen3:8b | qwen3:8b / qwen3:8b + thinking | gemma4:12b / gemma4:12b | qwen3.5:9b / qwen3.5:9b |
-|---|---|---|---|---|
-| Lists | 6.9/15 | 8.2/15 | 8.6/15 | 7.6/15 |
-| Reference values | 14.0/24 | 16.0/24 | 17.0/24 | 21.0/24 |
-| Decisions and statuses | 13.0/15 | 14.0/15 | 12.0/15 | 14.0/15 |
-| Vocabulary and organisation | 9.0/9 | 9.0/9 | 9.0/9 | 8.0/9 |
-| Mockups | 9.0/9 | 9.0/9 | 9.0/9 | 7.0/9 |
-| Code | 5.0/12 | 8.0/12 | 7.0/12 | 9.0/12 |
-| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 | 3.0/3 |
+| Category | qwen3:8b / qwen3:8b | qwen3:8b / qwen3:8b + thinking | gemma4:12b / gemma4:12b | qwen3.5:9b / qwen3.5:9b | qwen3.5:4b / gemma4:12b |
+|---|---|---|---|---|---|
+| Lists | 6.9/15 | 8.2/15 | 8.6/15 | 7.6/15 | 10.3/15 |
+| Reference values | 14.0/24 | 16.0/24 | 17.0/24 | 21.0/24 | 19.0/24 |
+| Decisions and statuses | 13.0/15 | 14.0/15 | 12.0/15 | 14.0/15 | 12.0/15 |
+| Vocabulary and organisation | 9.0/9 | 9.0/9 | 9.0/9 | 8.0/9 | 9.0/9 |
+| Mockups | 9.0/9 | 9.0/9 | 9.0/9 | 7.0/9 | 9.0/9 |
+| Code | 5.0/12 | 8.0/12 | 7.0/12 | 9.0/12 | 9.0/12 |
+| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 | 3.0/3 | 3.0/3 |
 
 ```mermaid
 xychart-beta
   title "Score out of 87"
-  x-axis ["qwen3:8b / qwen3:8b", "qwen3:8b / qwen3:8b + thinking", "gemma4:12b / gemma4:12b", "qwen3.5:9b / qwen3.5:9b"]
+  x-axis ["qwen3:8b / qwen3:8b", "qwen3:8b / qwen3:8b + thinking", "gemma4:12b / gemma4:12b", "qwen3.5:9b / qwen3.5:9b", "qwen3.5:4b / gemma4:12b"]
   y-axis "Score" 0 --> 87
-  bar [59.9, 67.2, 65.6, 69.6]
+  bar [59.9, 67.2, 65.6, 69.6, 71.3]
 ```
 
 ```mermaid
 xychart-beta
   title "Mean time per answer (s)"
-  x-axis ["qwen3:8b / qwen3:8b", "qwen3:8b / qwen3:8b + thinking", "gemma4:12b / gemma4:12b", "qwen3.5:9b / qwen3.5:9b"]
+  x-axis ["qwen3:8b / qwen3:8b", "qwen3:8b / qwen3:8b + thinking", "gemma4:12b / gemma4:12b", "qwen3.5:9b / qwen3.5:9b", "qwen3.5:4b / gemma4:12b"]
   y-axis "Seconds" 0 --> 90
-  bar [32.3, 67.8, 61.1, 41.8]
+  bar [32.3, 67.8, 61.1, 41.8, 64.2]
 ```
 
 What a 16 GB meeting can run: one model in both roles, or two that stay loaded together. Times here are real (no model reloaded between calls); the two `qwen3:8b` rows are the step-1 passes, which already ran one model.
@@ -121,7 +122,9 @@ What a 16 GB meeting can run: one model in both roles, or two that stay loaded t
 
 `qwen3.5:9b-q4_K_M` alone is the best configuration that fits: 80 %, 42 s per answer, one model resident. Unlike `gemma4`, it does not lose points when it also rewrites the queries.
 
-_Still to run: qwen3.5:4b / gemma4:12b._
+`qwen3.5:4b` rewriting the queries for `gemma4:12b` scores highest (82 %), but the two models are not kept loaded together on 16 GB: Ollama reloads one per call, hence a minute per answer, and a meeting adds the transcription model and Chromium on top.
+
+**Choice: `qwen3.5:9b-q4_K_M` in both roles, without thinking.** +10 points over `qwen3:8b` (69 % → 80 %) for 10 s more per answer, one model resident, and the strongest on reference values (21/24) and code (9/12). Its weak spots are lists (7.6/15, the long roadmap table) and mockups (7/9). Not measured here: the `fast` role's work during the meeting (claims, decisions, topics), to watch in the first live meetings.
 
 ### Memory
 
