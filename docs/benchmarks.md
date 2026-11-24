@@ -143,6 +143,58 @@ Measured with `ollama ps` once a minute during the runs (model and its 16k-token
 
 `qwen3.5:9b` takes less memory than `qwen3:8b`, the model it replaces.
 
+## 2026-11 — Embeddings
+
+| Embedding | Score /87 | % | Mean time | Median | 90th percentile | Errors |
+|---|---|---|---|---|---|---|
+| bge-m3 | 69.64 | 80 % | 41.3 s | 40.5 s | 53.4 s | 0 |
+| embeddinggemma:300m | 69.35 | 80 % | 38.1 s | 37.7 s | 50.5 s | 0 |
+| nomic-embed-text-v2-moe | 69.39 | 80 % | 39.9 s | 39.9 s | 50.4 s | 0 |
+| qwen3-embedding:0.6b | 64.52 | 74 % | 45.6 s | 41.9 s | 63.3 s | 0 |
+| snowflake-arctic-embed2 | 60.08 | 69 % | 40.5 s | 41.2 s | 50.2 s | 0 |
+
+| Category | bge-m3 | embeddinggemma:300m | nomic-embed-text-v2-moe | qwen3-embedding:0.6b | snowflake-arctic-embed2 |
+|---|---|---|---|---|---|
+| Lists | 7.6/15 | 8.4/15 | 5.4/15 | 7.5/15 | 5.1/15 |
+| Reference values | 21.0/24 | 20.0/24 | 19.0/24 | 20.0/24 | 17.0/24 |
+| Decisions and statuses | 14.0/15 | 14.0/15 | 15.0/15 | 12.0/15 | 13.0/15 |
+| Vocabulary and organisation | 8.0/9 | 8.0/9 | 9.0/9 | 8.0/9 | 8.0/9 |
+| Mockups | 7.0/9 | 8.0/9 | 8.0/9 | 6.0/9 | 8.0/9 |
+| Code | 9.0/12 | 8.0/12 | 10.0/12 | 8.0/12 | 6.0/12 |
+| Out of the KB | 3.0/3 | 3.0/3 | 3.0/3 | 3.0/3 | 3.0/3 |
+
+```mermaid
+xychart-beta
+  title "Score out of 87"
+  x-axis ["bge-m3", "embeddinggemma:300m", "nomic-embed-text-v2-moe", "qwen3-embedding:0.6b", "snowflake-arctic-embed2"]
+  y-axis "Score" 0 --> 87
+  bar [69.6, 69.4, 69.4, 64.5, 60.1]
+```
+
+```mermaid
+xychart-beta
+  title "Mean time per answer (s)"
+  x-axis ["bge-m3", "embeddinggemma:300m", "nomic-embed-text-v2-moe", "qwen3-embedding:0.6b", "snowflake-arctic-embed2"]
+  y-axis "Seconds" 0 --> 68
+  bar [41.3, 38.1, 39.9, 45.6, 40.5]
+```
+
+| Embedding | Answer in the excerpts | Index time | Index size |
+|---|---|---|---|
+| bge-m3 | 78.6/84 (94 %) | 26 min | 356M |
+| embeddinggemma:300m | 76.3/84 (91 %) | 10 min | 346M |
+| nomic-embed-text-v2-moe | 73.0/84 (87 %) | 9 min | 346M |
+| qwen3-embedding:0.6b | 79.4/84 (94 %) | 29 min | 356M |
+| snowflake-arctic-embed2 | 73.5/84 (87 %) | 26 min | 356M |
+
+`qwen3.5:9b-q4_K_M` in both roles; each embedding model indexes the knowledge base and both code repositories from scratch. "Answer in the excerpts" scores the excerpts given to `strong` as if they were the answer: it measures the search alone, but over-counts lists, whose names can be found scattered over several excerpts without the table that lists them.
+
+The first index (`bge-m3`) ran on the knowledge base of 2026-11-23; the others on the next day's, which only added writing rules to its `CLAUDE.md`. Those rules quoted the wrong answers they guard against, and the page was indexed: it appeared in one question's excerpts out of 87, without changing that answer. It is now excluded.
+
+`bge-m3`, `embeddinggemma:300m` and `nomic-embed-text-v2-moe` tie (69.4 to 69.6, within one answer). `embeddinggemma` takes half the memory of `bge-m3` (0.6 GB) and indexes 2.5 times faster, but finds the expected answer in fewer excerpts. `qwen3-embedding:0.6b` finds it most often yet answers worst: its excerpts carry the answer less directly. `qwen3-embedding:4b` was stopped while indexing: the knowledge base and 159 of 1,856 code files in 50 minutes, and 3.8 GB in memory beside the language model.
+
+**Choice: keep `bge-m3`.** No embedding does better, and it finds the expected answer most often among the three that tie. `embeddinggemma:300m` is the fallback if a meeting runs short of memory.
+
 ## 2026-10 — Excerpts and query rewriting
 
 Knowledge base of 2026-10-24, `qwen3:8b` for both roles, without thinking (`reasoning_effort: "none"`). The expected answers of that campaign differ from November's (the knowledge base grew from 11 to 17 mini-games in production): these scores are not comparable with the ones above.
