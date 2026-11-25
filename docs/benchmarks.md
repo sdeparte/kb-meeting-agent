@@ -143,6 +143,30 @@ Measured with `ollama ps` once a minute during the runs (model and its 16k-token
 
 `qwen3.5:9b` takes less memory than `qwen3:8b`, the model it replaces.
 
+## 2026-11 — Transcription
+
+Whisper (`mlx-community/whisper-large-v3-turbo`, the live engine) against Parakeet (`mlx-community/parakeet-tdt-0.6b-v3` through `parakeet-mlx`), on a Mac mini M4 with 16 GB. The audio is 243 utterances of two French Discord meetings, 3.9 minutes in all: the only audio left, since the agent deletes a meeting's audio once it is transcribed. Each was transcribed by hand into a reference: 84 hold speech (466 words), 159 hold only noise (breath, clicks, a cough). Both engines run through the agent's live chain: the audible check, the engine (Whisper with the hint "Otis, la KB"), the hallucination filter.
+
+| Engine | Word error rate | On utterances of 2 s and more | Speech lost | Text on noise | Mean time per utterance | 90th percentile | Real-time factor |
+|---|---|---|---|---|---|---|---|
+| Whisper large-v3-turbo | **23.7 %** | **11.4 %** | 20/84 | **7/159** | 0.83 s | 0.87 s | 0.47 |
+| Parakeet TDT 0.6B v3 | 37.6 % | 26.7 % | 20/84 | 25/159 | **0.12 s** | **0.17 s** | **0.07** |
+
+```mermaid
+xychart-beta
+  title "Word error rate, % (lower is better)"
+  x-axis ["Whisper, all", "Parakeet, all", "Whisper, 2 s+", "Parakeet, 2 s+"]
+  y-axis "%" 0 --> 60
+  bar [23.7, 37.6, 11.4, 26.7]
+```
+
+- **Whisper is kept.** It makes half the errors of Parakeet on the utterances that carry the meeting (2 s and more), and invents text on noise three times less often.
+- **Parakeet cannot be told the language.** It detects it per utterance, and on short or noisy French it switched to English: "Okay", "Yeah" on noise, and once a 15-second French sentence came out translated into English. Whisper is forced to French. In a French meeting this alone rules Parakeet out.
+- **Parakeet is 7 times faster** (0.12 s per utterance against 0.83 s). Whisper already transcribes about twice as fast as people speak with one worker, so speed is not what holds a meeting back.
+- **The 20 utterances lost are the same for both engines**: the audible check drops them before transcription. They are short ("yes", "OK", a cut word); none carried a question or a decision.
+- The reference started from a Whisper draft, corrected by ear. This can only favour Whisper slightly; it does not explain a 15-point gap, nor the switches to English.
+- Short utterances (under 2 s) are hard for both: 43 % and 55 % errors. Most are a word or two cut by the speaker detection.
+
 ## 2026-11 — Lists
 
 qwen3.5:9b in both roles, bge-m3. Long lists (mini-games in production, player states, item types) were the weakest category. The catalogue a list question needed was never in the excerpts: neither its heading ("catalogue of types") nor its rows (a status tag) used a word of the question. The KB was then fixed by following [kb-guidelines.md](kb-guidelines.md): a catalogue page of its own, whose heading names what it lists; one place for each count; a sentence where no single default exists. The agent was not changed.
