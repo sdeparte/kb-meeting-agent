@@ -22,6 +22,21 @@ async def start(session):
     await session.on_event("message", command("meeting_start", project="test"))
 
 
+async def test_kept_audio_outlives_the_minutes_and_the_notice_says_why(make_session):
+    session, link, *_ = make_session(
+        strong=FakeProvider(dict(MINUTES)), transcription={"keep_audio": True}
+    )
+    await start(session)
+    await speak(session)
+    meeting = session.meeting
+    await session.close()
+    assert any((meeting.dir / "audio").iterdir())
+    assert (
+        "kept on the agent's machine for 30 days, to measure and improve the transcription"
+        in (link.texts()[0])
+    )
+
+
 async def test_close_publishes_minutes_leaves_and_deletes_audio(make_session):
     session, link, clock, publisher = make_session(strong=FakeProvider(dict(MINUTES)))
     await start(session)
@@ -32,6 +47,7 @@ async def test_close_publishes_minutes_leaves_and_deletes_audio(make_session):
     assert publisher.prs[0][0].endswith("-weekly")
     assert link.of("leave") == [{}]
     assert not (meeting.dir / "audio").exists()
+    assert "then it is deleted" in link.texts()[0]
     state = json.loads((meeting.dir / "state.json").read_text(encoding="utf-8"))
     assert state["status"] == "closed"
     assert session.meeting is None

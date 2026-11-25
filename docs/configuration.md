@@ -162,6 +162,7 @@ connector:
 | `min_voiced_seconds` | `0.2` | utterances with less audio above -40 dBFS are not transcribed: Whisper turns near-silence into "Merci." |
 | `min_avg_logprob` | `-1.0` | transcriptions the engine is less confident about are dropped (`null` disables; the openai-compatible engine does not report it) |
 | `vocabulary` | `[]` | terms hinted before the glossary to the engines that take a prompt (the three Whisper engines), e.g. `["la KB"]` so that "la KB" is not heard as "l'AKB". Give a term with the words around it when they sound alike: "la KB" and "l'AKB" are the same sounds, and `[KB]` alone still gave "l'AKB" |
+| `keep_audio` | `false` | `true` keeps each meeting's audio until its folder expires (`transcript_retention_days`), instead of deleting it once the minutes are published. It is for building a hand-corrected reference to measure transcription engines against (see [benchmarks.md](benchmarks.md#2026-11--transcription)). The recording notice then tells participants how long the audio is kept and why; `!optout` still deletes a participant's audio at once. Turn it on only with the participants' agreement |
 | `vocabulary_max_chars` | `600` | length of the vocabulary hint: the agent's `agent.name` (not its aliases), then `vocabulary`, then the terms of the KB glossary's tables (first cells, then `code` spans), leaving out status tags, commit hashes and, among the `code` spans, code identifiers |
 
 Engine keys (`live`, `final`). A key that only some engines read is refused on the others, so that a setting never silently does nothing:

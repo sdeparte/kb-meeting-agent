@@ -208,7 +208,7 @@ Changing the project, ending the meeting, changing the level and acting on decis
 
 Participants can also address the agent by voice, by its `agent.name` ("Scribe, …"). It says at once what it is about to do ("🔎 Searching the KB: …", or drafting a validated decision), then answers in reply to that message. Every exchange with it (questions and answers, contradictions it pointed out, decisions it proposed and who validated them) is woven into the minutes, which name it "Scribe (AI)". The agent leaves when nobody is left in the meeting for `auto_leave_empty_minutes`.
 
-**Audio and privacy.** Audio is kept on the agent's machine until the minutes are published (for the second transcription pass), then deleted. `!optout` deletes your recorded audio at once; what you said before stays in the transcript. Meeting folders are deleted after `transcript_retention_days`. The full transcript is never published. Everyone in the meeting sees the recording notice when it starts.
+**Audio and privacy.** Audio is kept on the agent's machine until the minutes are published (for the second transcription pass), then deleted. With `transcription.keep_audio`, it is kept until the meeting folder expires, to measure the transcription, and the recording notice says so. `!optout` deletes your recorded audio at once; what you said before stays in the transcript. Meeting folders are deleted after `transcript_retention_days`. The full transcript is never published. Everyone in the meeting sees the recording notice when it starts.
 
 **Headsets.** Without one, a participant's microphone picks up the people around them, and their words end up in that participant's transcript.
 

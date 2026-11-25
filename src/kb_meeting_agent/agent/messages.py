@@ -70,10 +70,17 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "recording_notice": (
             "This meeting is transcribed by {name}, an AI agent. Say “{name}, …” to ask it a "
-            "question. Audio stays on the agent's machine until the minutes are published, then "
-            "it is deleted. The minutes and the validated decisions will be proposed as pull "
+            "question. {audio} The minutes and the validated decisions will be proposed as pull "
             "requests in {repo}. Project: {project} (!project <name> changes it until the agent "
             "speaks). Type !optout to stop transcribing your voice; !help lists the commands."
+        ),
+        "audio_deleted": (
+            "Audio stays on the agent's machine until the minutes are published, then it is "
+            "deleted."
+        ),
+        "audio_kept": (
+            "Audio is kept on the agent's machine for {days} days, to measure and improve the "
+            "transcription against a version corrected by hand; it is never published."
         ),
         "meeting_started": "Meeting started with the {project} project.",
         "meeting_already_running": "A meeting is already running.",
@@ -242,11 +249,19 @@ _MESSAGES: dict[str, dict[str, str]] = {
         ),
         "recording_notice": (
             "Cette réunion est transcrite par {name}, un agent IA. Dites « {name}, … » pour lui "
-            "poser une question. L'audio reste sur la machine de l'agent jusqu'à la publication "
-            "du compte rendu, puis il est supprimé. Le compte rendu et les décisions validées "
+            "poser une question. {audio} Le compte rendu et les décisions validées "
             "seront proposés en pull request dans {repo}. Projet : {project} (!projet <nom> en "
             "change tant que l'agent n'a pas parlé). Tapez !optout pour ne plus être transcrit ; "
             "!aide liste les commandes."
+        ),
+        "audio_deleted": (
+            "L'audio reste sur la machine de l'agent jusqu'à la publication du compte rendu, "
+            "puis il est supprimé."
+        ),
+        "audio_kept": (
+            "L'audio est conservé {days} jours sur la machine de l'agent, pour mesurer et "
+            "améliorer la transcription en la comparant à une version corrigée à la main ; il "
+            "n'est jamais publié."
         ),
         "meeting_started": "Réunion démarrée avec le projet {project}.",
         "meeting_already_running": "Une réunion est déjà en cours.",
