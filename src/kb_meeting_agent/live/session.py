@@ -487,12 +487,18 @@ class MeetingSession:
         )
 
     async def _post_notice(self, m: ActiveMeeting, kb_config: RepoConfig) -> None:
+        audio = (
+            t(m.lang, "audio_kept", days=self.deps.config.defaults.transcript_retention_days)
+            if self._transcription.keep_audio
+            else t(m.lang, "audio_deleted")
+        )
         notice = t(
             m.lang,
             "recording_notice",
             repo=kb_config.repo,
             name=self.deps.config.agent.name,
             project=m.project,
+            audio=audio,
         )
         await m.sink.send(OutMessage(notice))
 
@@ -1014,7 +1020,7 @@ class MeetingSession:
             except Exception:
                 log.exception("saving the meeting state failed")
             self.meeting = None
-        if isinstance(pr, PrRef):
+        if isinstance(pr, PrRef) and not self._transcription.keep_audio:
             shutil.rmtree(m.dir / "audio", ignore_errors=True)
         return pr
 

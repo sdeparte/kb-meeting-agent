@@ -199,6 +199,9 @@ class TranscriptionConfig(_Strict):
     # hinted before the glossary to the engines that take a prompt
     vocabulary: list[str] = Field(default_factory=list)
     vocabulary_max_chars: int = Field(600, ge=0)
+    # keep the audio until the meeting folder expires, to measure the transcription against a
+    # reference; the recording notice says so
+    keep_audio: bool = False
 
 
 # An empty name would match between any punctuation and a space: every segment would address it.
